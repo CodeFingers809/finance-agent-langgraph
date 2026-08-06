@@ -7,12 +7,17 @@ from app.models import UserQuota, User
 
 
 def check_and_update_quota(session: Session, user_id: uuid.UUID, model_name: str) -> UserQuota:
-    # Bypass rate limits for superuser accounts
     user = session.get(User, user_id)
     if user and user.is_superuser:
         quota = session.exec(select(UserQuota).where(UserQuota.user_id == user_id)).first()
         if not quota:
-            quota = UserQuota(user_id=user_id, last_request_at=None, daily_standard_count=0, daily_upgraded_count=0, last_reset_date=datetime.now(UTC).strftime("%Y-%m-%d"))
+            quota = UserQuota(
+                user_id=user_id,
+                last_request_at=None,
+                daily_standard_count=0,
+                daily_upgraded_count=0,
+                last_reset_date=datetime.now(UTC).strftime("%Y-%m-%d"),
+            )
             session.add(quota)
             session.commit()
             session.refresh(quota)
@@ -34,16 +39,6 @@ def check_and_update_quota(session: Session, user_id: uuid.UUID, model_name: str
         session.add(quota)
         session.commit()
         session.refresh(quota)
-
-    # Check 1 request per minute cooldown
-    if quota.last_request_at:
-        elapsed = (now - quota.last_request_at).total_seconds()
-        if elapsed < 60:
-            remaining_cooldown = int(60 - elapsed)
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Rate limit exceeded. Please wait {remaining_cooldown} seconds before your next request.",
-            )
 
     # Check daily reset
     if quota.last_reset_date != today_str:
@@ -79,39 +74,38 @@ def get_user_quota_status(session: Session, user_id: uuid.UUID) -> dict[str, int
     user = session.get(User, user_id)
     if user and user.is_superuser:
         return {
+            "standard_count": 0,
             "standard_remaining_today": 999,
             "standard_limit_today": 999,
+            "upgraded_count": 0,
             "upgraded_remaining_today": 999,
             "upgraded_limit_today": 999,
-            "seconds_until_next_allowed": 0,
+            "is_limited": False,
         }
 
     today_str = datetime.now(UTC).strftime("%Y-%m-%d")
-    now = datetime.now(UTC)
 
     quota = session.exec(select(UserQuota).where(UserQuota.user_id == user_id)).first()
     if not quota:
         return {
+            "standard_count": 0,
             "standard_remaining_today": 10,
             "standard_limit_today": 10,
+            "upgraded_count": 0,
             "upgraded_remaining_today": 3,
             "upgraded_limit_today": 3,
-            "seconds_until_next_allowed": 0,
+            "is_limited": False,
         }
 
     standard_count = quota.daily_standard_count if quota.last_reset_date == today_str else 0
     upgraded_count = quota.daily_upgraded_count if quota.last_reset_date == today_str else 0
 
-    cooldown = 0
-    if quota.last_request_at:
-        elapsed = (now - quota.last_request_at).total_seconds()
-        if elapsed < 60:
-            cooldown = int(60 - elapsed)
-
     return {
+        "standard_count": standard_count,
         "standard_remaining_today": max(0, 10 - standard_count),
         "standard_limit_today": 10,
+        "upgraded_count": upgraded_count,
         "upgraded_remaining_today": max(0, 3 - upgraded_count),
         "upgraded_limit_today": 3,
-        "seconds_until_next_allowed": cooldown,
+        "is_limited": standard_count >= 10,
     }

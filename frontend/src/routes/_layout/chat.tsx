@@ -421,7 +421,9 @@ function ChatPage() {
       setIsGenerating(false)
       setIsThinkingToolsActive(false)
       abortControllerRef.current = null
+      fetchQuotaStatus()
     }
+
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

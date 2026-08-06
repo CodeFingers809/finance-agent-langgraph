@@ -140,59 +140,116 @@ def get_indian_indices() -> str:
 
 
 @tool
-def run_technical_analysis(symbol: str, period: str = "6m") -> str:
-    """Perform technical analysis (SMA 20/50/200, EMA 12/26, RSI 14, MACD, Bollinger Bands) on an Indian stock."""
+def run_technical_analysis(symbol: str, period: str = "1y") -> str:
+    """Perform comprehensive Technical Analysis (EMA 20/50/200, MACD 12/26/9, RSI 14, Volume 20D Avg, Bollinger Bands) on an Indian stock (NSE/BSE). Returns pure structured numeric metrics and signal interpretations."""
     norm_sym = normalize_indian_symbol(symbol)
     try:
         ticker = yf.Ticker(norm_sym)
         df = ticker.history(period=period)
-        if df.empty or len(df) < 20:
-            return json.dumps({"error": "Insufficient historical data for TA calculation."})
+        if df.empty or len(df) < 30:
+            return json.dumps({"error": f"Insufficient historical data for {symbol}."})
 
         close = df["Close"]
-        sma20 = float(close.rolling(window=20).mean().iloc[-1])
-        sma50 = float(close.rolling(window=50).mean().iloc[-1]) if len(close) >= 50 else None
-        sma200 = float(close.rolling(window=200).mean().iloc[-1]) if len(close) >= 200 else None
+        volume = df["Volume"]
+        latest_price = float(close.iloc[-1])
 
-        ema12 = float(close.ewm(span=12, adjust=False).mean().iloc[-1])
-        ema26 = float(close.ewm(span=26, adjust=False).mean().iloc[-1])
-        macd = ema12 - ema26
-        signal = float(pd.Series(macd).ewm(span=9, adjust=False).mean().iloc[-1]) if isinstance(macd, pd.Series) else macd
+        # 1. EMAs (20, 50, 200)
+        ema20 = float(close.ewm(span=20, adjust=False).mean().iloc[-1])
+        ema50 = float(close.ewm(span=50, adjust=False).mean().iloc[-1])
+        ema200 = float(close.ewm(span=200, adjust=False).mean().iloc[-1]) if len(close) >= 200 else None
 
-        # RSI 14
+        ema_trend = "Bullish" if (latest_price > ema20 and (not ema50 or ema20 > ema50)) else "Bearish"
+        golden_cross = bool(ema50 > ema200) if (ema50 and ema200) else False
+
+        # 2. MACD (12, 26, 9)
+        ema12_series = close.ewm(span=12, adjust=False).mean()
+        ema26_series = close.ewm(span=26, adjust=False).mean()
+        macd_series = ema12_series - ema26_series
+        signal_series = macd_series.ewm(span=9, adjust=False).mean()
+        hist_series = macd_series - signal_series
+
+        macd_val = float(macd_series.iloc[-1])
+        signal_val = float(signal_series.iloc[-1])
+        hist_val = float(hist_series.iloc[-1])
+        prev_hist = float(hist_series.iloc[-2]) if len(hist_series) >= 2 else 0.0
+
+        macd_signal = (
+            "Bullish Crossover" if (hist_val > 0 and prev_hist <= 0)
+            else ("Bearish Crossover" if (hist_val < 0 and prev_hist >= 0)
+            else ("Bullish" if macd_val > signal_val else "Bearish"))
+        )
+
+        # 3. RSI 14
         delta = close.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / loss
-        rsi = float(100 - (100 / (1 + rs.iloc[-1]))) if not rs.empty else None
+        rsi_series = 100 - (100 / (1 + rs))
+        rsi_val = float(rsi_series.iloc[-1]) if not rsi_series.empty else None
+        prev_rsi = float(rsi_series.iloc[-6]) if len(rsi_series) >= 6 else rsi_val
+        rsi_trend = "Rising" if (rsi_val and prev_rsi and rsi_val > prev_rsi) else "Falling"
 
-        # Bollinger Bands
+        rsi_status = "Neutral"
+        if rsi_val:
+            if rsi_val >= 70:
+                rsi_status = "Overbought"
+            elif rsi_val <= 30:
+                rsi_status = "Oversold"
+
+        # 4. Volume Analysis
+        latest_vol = float(volume.iloc[-1])
+        avg_vol_20 = float(volume.tail(20).mean())
+        vol_ratio = round((latest_vol / avg_vol_20), 2) if avg_vol_20 > 0 else 1.0
+        vol_status = (
+            "High Volume Surge (>1.5x Avg)" if vol_ratio >= 1.5
+            else ("Low Volume" if vol_ratio <= 0.7 else "Normal Volume")
+        )
+
+        # 5. Bollinger Bands (20, 2)
+        sma20 = float(close.rolling(window=20).mean().iloc[-1])
         std20 = float(close.rolling(window=20).std().iloc[-1])
         upper_bb = sma20 + (std20 * 2)
         lower_bb = sma20 - (std20 * 2)
-        latest_price = float(close.iloc[-1])
+        percent_b = round((latest_price - lower_bb) / (upper_bb - lower_bb), 2) if upper_bb > lower_bb else 0.5
 
-        ta_summary = {
+        ta_data = {
             "symbol": norm_sym,
-            "latestPrice": latest_price,
-            "indicators": {
-                "SMA_20": round(sma20, 2),
-                "SMA_50": round(sma50, 2) if sma50 else None,
-                "SMA_200": round(sma200, 2) if sma200 else None,
-                "RSI_14": round(rsi, 2) if rsi else None,
-                "MACD": round(macd, 2),
-                "MACD_Signal": round(signal, 2),
-                "BollingerUpper": round(upper_bb, 2),
-                "BollingerLower": round(lower_bb, 2),
+            "current_price": round(latest_price, 2),
+            "moving_averages": {
+                "EMA_20": round(ema20, 2),
+                "EMA_50": round(ema50, 2),
+                "EMA_200": round(ema200, 2) if ema200 else None,
+                "ema_alignment": ema_trend,
+                "golden_cross_50_200": golden_cross,
             },
-            "signals": {
-                "rsi_condition": "Overbought" if rsi and rsi > 70 else ("Oversold" if rsi and rsi < 30 else "Neutral"),
-                "trend_sma50": "Bullish" if sma50 and latest_price > sma50 else "Bearish",
-            }
+            "macd": {
+                "macd_line": round(macd_val, 2),
+                "signal_line": round(signal_val, 2),
+                "histogram": round(hist_val, 2),
+                "macd_state": macd_signal,
+            },
+            "rsi": {
+                "rsi_14": round(rsi_val, 2) if rsi_val else None,
+                "condition": rsi_status,
+                "5d_momentum": rsi_trend,
+            },
+            "volume": {
+                "latest_volume": int(latest_vol),
+                "avg_20d_volume": int(avg_vol_20),
+                "volume_vs_20d_ratio": vol_ratio,
+                "volume_analysis": vol_status,
+            },
+            "bollinger_bands": {
+                "upper_band": round(upper_bb, 2),
+                "middle_band_sma20": round(sma20, 2),
+                "lower_band": round(lower_bb, 2),
+                "percent_b": percent_b,
+            },
         }
-        return json.dumps(ta_summary, indent=2)
+        return json.dumps(ta_data, indent=2)
     except Exception as e:
         return json.dumps({"error": f"Technical analysis failed for {symbol}: {str(e)}"})
+
 
 
 @tool
