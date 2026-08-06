@@ -152,11 +152,15 @@ class UserQuota(SQLModel, table=True):
 
 
 class QuotaStatusPublic(SQLModel):
+    standard_count: int = 0
     standard_remaining_today: int
     standard_limit_today: int = 10
+    upgraded_count: int = 0
     upgraded_remaining_today: int
     upgraded_limit_today: int = 3
-    seconds_until_next_allowed: int
+    seconds_until_next_allowed: int = 0
+    is_limited: bool = False
+
 
 
 # Conversation Models

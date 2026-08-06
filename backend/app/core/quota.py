@@ -80,6 +80,7 @@ def get_user_quota_status(session: Session, user_id: uuid.UUID) -> dict[str, int
             "upgraded_count": 0,
             "upgraded_remaining_today": 999,
             "upgraded_limit_today": 999,
+            "seconds_until_next_allowed": 0,
             "is_limited": False,
         }
 
@@ -94,6 +95,7 @@ def get_user_quota_status(session: Session, user_id: uuid.UUID) -> dict[str, int
             "upgraded_count": 0,
             "upgraded_remaining_today": 3,
             "upgraded_limit_today": 3,
+            "seconds_until_next_allowed": 0,
             "is_limited": False,
         }
 
@@ -107,5 +109,7 @@ def get_user_quota_status(session: Session, user_id: uuid.UUID) -> dict[str, int
         "upgraded_count": upgraded_count,
         "upgraded_remaining_today": max(0, 3 - upgraded_count),
         "upgraded_limit_today": 3,
+        "seconds_until_next_allowed": 0,
         "is_limited": standard_count >= 10,
     }
+
