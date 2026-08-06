@@ -74,9 +74,25 @@ app.add_middleware(
 )
 
 
+from fastapi.responses import FileResponse, Response
+
 # Include API Router first under /api/v1
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
-# Mount static frontend files if built static assets exist
-if FRONTEND_DIR.exists() and (FRONTEND_DIR / "assets").exists():
-    app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")
+# Mount static frontend files and serve SPA routes
+if FRONTEND_DIR.exists():
+    if (FRONTEND_DIR / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        if full_path.startswith("api/"):
+            return Response(status_code=404)
+        file_path = FRONTEND_DIR / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        index_file = FRONTEND_DIR / "index.html"
+        if index_file.exists():
+            return FileResponse(index_file)
+        return Response(status_code=404)
+
