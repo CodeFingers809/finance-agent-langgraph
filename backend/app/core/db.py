@@ -8,13 +8,14 @@ from app.models import User, UserCreate
 from pathlib import Path
 
 db_url = str(settings.SQLALCHEMY_DATABASE_URI)
-if db_url.startswith("sqlite"):
-    db_file_path = db_url.replace("sqlite:///", "").replace("./", "")
-    if db_file_path and "/" in db_file_path:
-        Path(db_file_path).parent.mkdir(parents=True, exist_ok=True)
+if db_url.startswith("sqlite:///"):
+    raw_path = db_url[len("sqlite:///"):]
+    if raw_path and "/" in raw_path:
+        Path(raw_path).parent.mkdir(parents=True, exist_ok=True)
 
 connect_args = {"check_same_thread": False} if db_url.startswith("sqlite") else {}
 engine = create_engine(db_url, connect_args=connect_args)
+
 
 
 
