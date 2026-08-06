@@ -15,18 +15,22 @@ def init_db(session: Session) -> None:
     # Auto-create tables for local embedded DB (SQLite)
     SQLModel.metadata.create_all(engine)
 
-    user = session.exec(
-        select(User).where(User.email == settings.FIRST_SUPERUSER)
-    ).first()
-    if not user:
-        user_in = UserCreate(
-            email=settings.FIRST_SUPERUSER,
-            password=settings.FIRST_SUPERUSER_PASSWORD,
-            is_superuser=True,
-        )
-        user = crud.create_user(session=session, user_create=user_in)
-    else:
-        user.hashed_password = get_password_hash(settings.FIRST_SUPERUSER_PASSWORD)
-        user.is_superuser = True
-        session.add(user)
-        session.commit()
+    try:
+        user = session.exec(
+            select(User).where(User.email == settings.FIRST_SUPERUSER)
+        ).first()
+        if not user:
+            user_in = UserCreate(
+                email=settings.FIRST_SUPERUSER,
+                password=settings.FIRST_SUPERUSER_PASSWORD,
+                is_superuser=True,
+            )
+            crud.create_user(session=session, user_create=user_in)
+        else:
+            user.hashed_password = get_password_hash(settings.FIRST_SUPERUSER_PASSWORD)
+            user.is_superuser = True
+            session.add(user)
+            session.commit()
+    except Exception as e:
+        session.rollback()
+
