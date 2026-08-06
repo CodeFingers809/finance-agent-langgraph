@@ -57,7 +57,6 @@ def get_agent_executor(model_name: str = "gemini-3.5-flash-lite"):
     agent = create_react_agent(
         model=llm,
         tools=ALL_FINANCIAL_TOOLS,
-        prompt=SystemMessage(content=SYSTEM_PROMPT),
     )
     return agent
 
@@ -70,19 +69,17 @@ async def stream_agent_events(
     start_time = time.time()
 
     try:
+        from app.agent.context_engine import pack_context_messages
+
         agent = get_agent_executor(model_name=model_name)
 
-        messages = []
-        for h in history_messages:
-            if h.get("sender") == "user":
-                messages.append(HumanMessage(content=h["content"]))
-            else:
-                messages.append(AIMessage(content=h["content"]))
-
-
-        messages.append(HumanMessage(content=user_message))
+        messages = pack_context_messages(
+            user_message=user_message,
+            history_messages=history_messages,
+        )
 
         inputs = {"messages": messages}
+
 
         async for event in agent.astream_events(inputs, version="v2"):
             kind = event["event"]
