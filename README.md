@@ -1,205 +1,252 @@
-# Finance Harness
+# CFA Financial Agent & Portfolio Optimization Engine
 
-Full stack FastAPI & React application providing user authentication, management, and base infrastructure.
+A full-stack AI financial analyst and portfolio management system built with LangGraph, FastAPI, and React. The system combines LLM reasoning (Google Gemini) with deterministic quantitative tools to perform stock screening, deep fundamental research, technical indicator analysis, portfolio metrics evaluation, and Hierarchical Risk Parity (HRP) allocation.
 
-## Stack
+---
 
-- **Backend**: FastAPI, SQLModel, Pydantic, PostgreSQL, Pytest
-- **Frontend**: React, TypeScript, Vite, Tailwind CSS, Chakra UI / UI components
-- **Auth**: JWT Authentication & Password Hashing
-- **DevOps**: Docker Compose, Traefik
+## What this actually is
 
+This application is an interactive research assistant for financial analysis and portfolio management. Instead of relying on an LLM to calculate financial math (which leads to hallucinated numbers), the agent delegates all numeric processing, indicators, metrics, and matrix factorizations to deterministic Python routines (using `yfinance`, `pandas`, `numpy`, and `scipy`). The LLM is used strictly for intent classification, tool routing, dynamic research synthesis, and natural language reporting.
 
-### Dashboard - Dark Mode
+The system features real-time Server-Sent Events (SSE) streaming, persistent tool execution timelines, tree-based chat branching, and hybrid context management designed to preserve historical context without exceeding LLM context windows.
 
-[![Dark mode dashboard screenshot](img/dashboard-dark.png)](https://github.com/fastapi/full-stack-fastapi-template)
+---
 
-### Interactive API Documentation
+## Core Features
 
-[![API docs](img/docs.png)](https://github.com/fastapi/full-stack-fastapi-template)
+### 1. Stock Screening
+- Filter equities across broad markets based on customizable parameters (e.g., market capitalization, P/E ratios, sector filters, dividend yield, and price momentum).
 
-## How To Use It
+### 2. In-Depth Stock Research
+- **Fundamental Data**: Retrieves real-time stock quotes, quarterly balance sheets, income statements, cash flow statements, corporate filings, press releases, and SEC announcements.
+- **Analyst Insights & Peers**: Gathers analyst consensus recommendations, target price medians, and automated peer comparison matrices.
+- **Technical Analysis**: Computes 20/50/200 Exponential Moving Averages (EMAs), EMA trend alignment, MACD (12, 26, 9) crossovers, RSI (14) momentum, 20-day Volume Surge ratios ($>1.5\times$ average), and Bollinger Bands ($\%B$). Results are passed to the agent as pure structured JSON metrics.
 
-You can **just fork or clone** this repository and use it as is.
+### 3. Portfolio Analysis & Performance Tracking
+- Evaluates multi-asset portfolios against benchmark indices (e.g., Nifty 50, S&P 500).
+- Computes standard quantitative risk and return metrics: CAGR, Sharpe Ratio, Sortino Ratio, Portfolio Alpha, and Beta.
+- Generates actionable rebalancing and asset allocation recommendations based on current market metrics.
 
-✨ It just works. ✨
+### 4. Watchlist Management
+- Create, view, update, and manage custom watchlists with real-time price tracking and quote updates.
 
-### How to Use a Private Repository
+### 5. Chat Branching
+- Branch out from any historical message turn to fork a conversation into an isolated child tree.
+- Enables exploring alternative hypothetical scenarios (e.g., "What if I reallocated 20% to FMCG stocks instead?") without polluting the main conversation history.
 
-If you want to have a private repository, GitHub won't allow you to simply fork it as it doesn't allow changing the visibility of forks.
+### 6. Hybrid Context Engine (Unlimited Context Architecture)
+- Combines three complementary strategies to handle long conversation threads efficiently:
+  - **Sliding Window**: Retains recent active message turns for immediate conversational flow.
+  - **BM25 Lexical Search**: Queries past turns using BM25 keyword matching to retrieve relevant historical facts when referenced later.
+  - **Recursive Summarization**: Periodically condenses older dialogue turns into a persistent summary node injected into system context.
 
-But you can do the following:
+### 7. Broader Market News Feed
+- Aggregates market-wide financial news, macroeconomic updates, and sector trends for broad situational awareness.
 
-- Create a new GitHub repo, for example `my-full-stack`.
-- Clone this repository manually, set the name with the name of the project you want to use, for example `my-full-stack`:
+### 8. Hierarchical Risk Parity (HRP) Portfolio Optimization
+- Constructs risk-optimal portfolios using graph-based Hierarchical Risk Parity clustering (`scipy.cluster.hierarchy`).
+- Avoids matrix inversion instabilities present in traditional Markowitz Mean-Variance Optimization, delivering robust asset weights during volatile market conditions.
 
-```bash
-git clone git@github.com:fastapi/full-stack-fastapi-template.git my-full-stack
-```
+---
 
-- Enter into the new directory:
+## Architecture & Technical Choices
 
-```bash
-cd my-full-stack
-```
+### LangGraph Agentic Pipeline
+- **State Graph Workflow**: Built on `langgraph`, maintaining an explicit execution graph over conversation history, tool calls, and model outputs.
+- **Streaming Tool Events**: Streams intermediate execution steps (e.g., `run_technical_analysis`, `search_stock_news`) to the frontend over Server-Sent Events (SSE), keeping tool status indicators open across sequential tool runs.
 
-- Set the new origin to your new repository, copy it from the GitHub interface, for example:
+### Math vs. LLM Separation
+- **Deterministic Math**: All financial formulas, moving averages, risk ratios, and matrix calculations run strictly in standard Python runtime (`numpy`, `pandas`, `scipy`).
+- **Structured Tool Returns**: Tools output clean JSON strings directly to the model, preventing raw chart hallucination or context window bloat.
 
-```bash
-git remote set-url origin git@github.com:octocat/my-full-stack.git
-```
+### Security, Rate Limiting & Auth
+- **JWT Authentication**: Password hashing using Argon2id (`passlib` + `argon2-cffi`) and OAuth2 bearer tokens.
+- **Rate Limiting**: IP and endpoint rate limits enforced via `SlowAPI`. Dual-tier daily model quotas (10 requests/day for standard tier, 999/day for superusers).
+- **Security Headers Middleware**: Enforces `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection`, `Referrer-Policy`, and `Content-Security-Policy`.
+- **Parameterized SQL**: All database operations use `SQLModel` / `SQLAlchemy` ORM parameterization, eliminating SQL injection vectors.
 
-- Add this repo as another "remote" to allow you to get updates later:
+### Production Storage & Persistence
+- **SQLite WAL Mode**: SQLite embedded database using Write-Ahead Logging for non-blocking concurrent reads.
+- **Host Volume Mounting**: Database file is mapped to a host volume (`-v /home/ec2-user/finance-agent/data:/app/backend/data`), guaranteeing zero data loss across container updates or service restarts.
 
-```bash
-git remote add upstream git@github.com:fastapi/full-stack-fastapi-template.git
-```
+---
 
-- Push the code to your new repository:
+## Tech Stack
 
-```bash
-git push -u origin master
-```
+### Backend
+- **Framework**: Python 3.14, FastAPI, Pydantic v2
+- **Agent Orchestration**: LangGraph, LangChain Core
+- **AI Models**: Google Gemini 2.5 Flash / Pro (`google-genai`)
+- **Database & ORM**: SQLModel (SQLAlchemy) over SQLite
+- **Financial Data & Math**: `yfinance`, `pandas`, `numpy`, `scipy`
+- **Security & Rate Limiting**: Argon2id, PyJWT, SlowAPI
 
-### Update From the Original Template
+### Frontend
+- **Framework**: React 19, TypeScript, Vite
+- **Routing & State**: TanStack Router (`@tanstack/react-router`), TanStack Query (`@tanstack/react-query`)
+- **Styling & UI**: TailwindCSS v4, Lucide React, Radix UI primitives
+- **Rendering & Math**: `react-markdown`, `remark-gfm`, `remark-math`, `rehype-katex` (KaTeX inline/block LaTeX formulas)
 
-After cloning the repository, and after doing changes, you might want to get the latest changes from this original template.
+### Infrastructure & Deployment
+- **Containerization**: Multi-stage Docker build with `bun` frontend compilation and `uv` Python environment sync.
+- **Cloud Host**: AWS EC2 (Amazon Linux) with Nginx reverse proxy and Let's Encrypt TLS/SSL termination (`https://finance-agent.brnch.in`).
 
-- Make sure you added the original repository as a remote, you can check it with:
+---
 
-```bash
-git remote -v
+## Running It
 
-origin    git@github.com:octocat/my-full-stack.git (fetch)
-origin    git@github.com:octocat/my-full-stack.git (push)
-upstream    git@github.com:fastapi/full-stack-fastapi-template.git (fetch)
-upstream    git@github.com:fastapi/full-stack-fastapi-template.git (push)
-```
+### Prerequisites
+- **Python**: 3.11+ (managed via `uv` or `venv`)
+- **Node.js**: v18+ and `bun` / `npm`
+- **Gemini API Key**: Obtainable from Google AI Studio
 
-- Pull the latest changes without merging:
+---
 
-```bash
-git pull --no-commit upstream master
-```
+### 1. Local Development Setup
 
-This will download the latest changes from this template without committing them, that way you can check everything is right before committing.
+#### Backend
+1. Clone the repository and navigate to the backend directory:
+   ```bash
+   git clone git@github.com:CodeFingers809/cfa-agent-langgraph.git
+   cd cfa-agent-langgraph/backend
+   ```
 
-- If there are conflicts, solve them in your editor.
+2. Create a virtual environment and install dependencies:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -e .
+   ```
 
-- Once you are done, commit the changes:
+3. Configure environment variables in `.env` (or copy from `.env.example`):
+   ```bash
+   cp ../.env.example .env
+   ```
+   Set `GEMINI_API_KEY=your_actual_api_key`.
 
-```bash
-git merge --continue
-```
+4. Start the FastAPI development server:
+   ```bash
+   fastapi dev app/main.py --port 8000
+   ```
+   The API will be live at `http://localhost:8000`. Interactive docs are available at `http://localhost:8000/docs`.
 
-### Configure
+#### Frontend
+1. Navigate to the frontend directory:
+   ```bash
+   cd ../frontend
+   ```
 
-You can then update configs in the `.env` files to customize your configurations.
+2. Install dependencies and start the Vite dev server:
+   ```bash
+   npm install
+   npm run dev
+   ```
+   Open `http://localhost:5173` in your browser.
 
-Before deploying it, make sure you change at least the values for:
+---
 
-- `SECRET_KEY`
-- `FIRST_SUPERUSER_PASSWORD`
-- `POSTGRES_PASSWORD`
+### 2. Docker Setup (Local Container Run)
 
-You can (and should) pass these as environment variables from secrets.
-
-Read the [deployment.md](./deployment.md) docs for more details.
-
-### Generate Secret Keys
-
-Some environment variables in the `.env` file have a default value of `changethis`.
-
-You have to change them with a secret key, to generate secret keys you can run the following command:
-
-```bash
-python -c "import secrets; print(secrets.token_urlsafe(32))"
-```
-
-Copy the content and use that as password / secret key. And run that again to generate another secure key.
-
-## How To Use It - Alternative With Copier
-
-This repository also supports generating a new project using [Copier](https://copier.readthedocs.io).
-
-It will copy all the files, ask you configuration questions, and update the `.env` files with your answers.
-
-### Install Copier
-
-You can install Copier with:
-
-```bash
-pip install copier
-```
-
-Or better, if you have [`pipx`](https://pipx.pypa.io/), you can run it with:
-
-```bash
-pipx install copier
-```
-
-**Note**: If you have `pipx`, installing copier is optional, you could run it directly.
-
-### Generate a Project With Copier
-
-Decide a name for your new project's directory, you will use it below. For example, `my-awesome-project`.
-
-Go to the directory that will be the parent of your project, and run the command with your project's name:
-
-```bash
-copier copy https://github.com/fastapi/full-stack-fastapi-template my-awesome-project --trust
-```
-
-If you have `pipx` and you didn't install `copier`, you can run it directly:
+Build and run the unified single-container image (serves frontend static assets + FastAPI API server):
 
 ```bash
-pipx run copier copy https://github.com/fastapi/full-stack-fastapi-template my-awesome-project --trust
+# Build multi-stage Docker image
+docker build -t finance-agent -f backend/Dockerfile .
+
+# Create a local data folder for persistent storage
+mkdir -p ./data
+
+# Run container with environment file and volume mount
+docker run -d \
+  --name finance-agent-app \
+  -p 8000:8000 \
+  -v $(pwd)/data:/app/backend/data \
+  --env-file .env \
+  finance-agent
 ```
 
-**Note** the `--trust` option is necessary to be able to execute a [post-creation script](https://github.com/fastapi/full-stack-fastapi-template/blob/master/.copier/update_dotenv.py) that updates your `.env` files.
+Access the app at `http://localhost:8000`.
 
-### Input Variables
+---
 
-Copier will ask you for some data, you might want to have at hand before generating the project.
+### 3. Production EC2 & Nginx Deployment
 
-But don't worry, you can just update any of that in the `.env` files afterwards.
+#### A. Host Environment Setup
+On the target EC2 instance:
+```bash
+# Install Docker and Nginx
+sudo dnf install -y docker nginx certbot python3-certbot-nginx
+sudo systemctl enable --now docker nginx
 
-The input variables, with their default values (some auto generated) are:
+# Create deployment directory
+mkdir -p /home/ec2-user/finance-agent/data
+cd /home/ec2-user/finance-agent
+git clone git@github.com:CodeFingers809/cfa-agent-langgraph.git .
+```
 
-- `project_name`: (default: `"FastAPI Project"`) The name of the project, shown to API users (in .env).
-- `stack_name`: (default: `"fastapi-project"`) The name of the stack used for Docker Compose labels and project name (no spaces, no periods) (in .env).
-- `secret_key`: (default: `"changethis"`) The secret key for the project, used for security, stored in .env, you can generate one with the method above.
-- `first_superuser`: (default: `"admin@example.com"`) The email of the first superuser (in .env).
-- `first_superuser_password`: (default: `"changethis"`) The password of the first superuser (in .env).
-- `smtp_host`: (default: "") The SMTP server host to send emails, you can set it later in .env.
-- `smtp_user`: (default: "") The SMTP server user to send emails, you can set it later in .env.
-- `smtp_password`: (default: "") The SMTP server password to send emails, you can set it later in .env.
-- `emails_from_email`: (default: `"info@example.com"`) The email account to send emails from, you can set it later in .env.
-- `postgres_password`: (default: `"changethis"`) The password for the PostgreSQL database, stored in .env, you can generate one with the method above.
-- `sentry_dsn`: (default: "") The DSN for Sentry, if you are using it, you can set it later in .env.
+#### B. Create Production `.env`
+Create `/home/ec2-user/finance-agent/.env`:
+```env
+DOMAIN=finance-agent.brnch.in
+FRONTEND_HOST=https://finance-agent.brnch.in
+ENVIRONMENT=production
 
-## Backend Development
+PROJECT_NAME="Finance Agent"
+SECRET_KEY="generate_secure_random_key_here"
 
-Backend docs: [backend/README.md](./backend/README.md).
+FIRST_SUPERUSER=aldbha123@gmail.com
+FIRST_SUPERUSER_PASSWORD=4^.Y8jrJ-%-Tctb
 
-## Frontend Development
+GEMINI_API_KEY=your_gemini_api_key
+DATABASE_URL=sqlite:///data/app.db
+BACKEND_CORS_ORIGINS="https://finance-agent.brnch.in,http://finance-agent.brnch.in"
+```
 
-Frontend docs: [frontend/README.md](./frontend/README.md).
+#### C. Build & Launch Container
+```bash
+sudo docker build -t finance-agent -f backend/Dockerfile .
+sudo docker rm -f finance-agent-app 2>/dev/null || true
 
-## Deployment
+sudo docker run -d \
+  --name finance-agent-app \
+  --restart always \
+  -p 8000:8000 \
+  -v /home/ec2-user/finance-agent/data:/app/backend/data \
+  --env-file /home/ec2-user/finance-agent/.env \
+  finance-agent
+```
 
-Deployment docs: [deployment.md](./deployment.md).
+#### D. Nginx SSL Reverse Proxy Config
+Create `/etc/nginx/conf.d/finance-agent.conf`:
+```nginx
+server {
+    server_name finance-agent.brnch.in;
 
-## Development
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
 
-General development docs: [development.md](./development.md).
+        # Disable buffering for real-time SSE streaming
+        proxy_buffering off;
+        proxy_cache off;
+    }
+}
+```
 
-This includes using Docker Compose, custom local domains, `.env` configurations, etc.
+Obtain Let's Encrypt SSL certificate:
+```bash
+sudo certbot --nginx -d finance-agent.brnch.in --non-interactive --agree-tos -m aldbha123@gmail.com
+sudo systemctl reload nginx
+```
 
-## Release Notes
-
-Check the file [release-notes.md](./release-notes.md).
+---
 
 ## License
 
-The Full Stack FastAPI Template is licensed under the terms of the MIT license.
+MIT License. Free for personal research, educational, and quantitative exploration.
