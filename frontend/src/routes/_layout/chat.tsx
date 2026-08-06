@@ -208,12 +208,18 @@ function ChatPage() {
       })
       if (res.ok) {
         const data = await res.json()
-        navigate({ to: "/chat", search: { convId: data.new_conversation_id } as any })
+        const newId = data.new_conversation_id
+        if (newId) {
+          setActiveConversationId(newId)
+          fetchMessages(newId)
+          navigate({ to: "/chat", search: { convId: newId } as any, replace: true })
+        }
       }
     } catch (err) {
       console.error("Branch conversation error", err)
     }
   }
+
 
   const handleCopyMessage = (msgId: string, content: string) => {
     navigator.clipboard.writeText(content)
@@ -520,7 +526,7 @@ function ChatPage() {
                 </div>
               )}
 
-              <div className={`space-y-3 ${m.sender === "user" ? "max-w-[80%]" : "w-full flex-1"}`}>
+              <div className={`space-y-3 ${m.sender === "user" ? "max-w-[80%]" : "max-w-[calc(100%-2.75rem)] flex-1"}`}>
                 {/* Render Tool Events ON TOP of AI response */}
                 {m.sender === "agent" && isLatestAgentMsg && activeToolEvents.length > 0 && (
                   <div className="mb-2">
@@ -582,8 +588,8 @@ function ChatPage() {
                       "Analyzing market data..."
                     )}
 
-                    {/* Action Toolbar: Copy (User & Agent) & Branch Out (Agent only) */}
-                    <div className={`opacity-0 group-hover:opacity-100 transition-opacity absolute flex items-center gap-1 top-2 ${m.sender === "user" ? "-left-16" : "-right-16"}`}>
+                    {/* Action Toolbar: Copy (User & Agent) & Branch Out (Agent only) - Vertical Stack */}
+                    <div className={`opacity-0 group-hover:opacity-100 transition-opacity absolute flex flex-col gap-1.5 top-2 ${m.sender === "user" ? "-left-8" : "-right-8"}`}>
                       <Button
                         type="button"
                         variant="ghost"
@@ -614,6 +620,7 @@ function ChatPage() {
                     </div>
                   </div>
                 )}
+
 
                 {/* HRP Portfolio Allocation Table */}
                 {m.hrp_table && m.hrp_table.symbols && (
