@@ -48,26 +48,102 @@ def get_stock_prices_and_metrics(symbols: list[str]) -> str:
     return json.dumps(results, indent=2)
 
 
+def format_df_to_clean_dict(df: pd.DataFrame, max_cols: int = 4) -> dict:
+    if df is None or df.empty:
+        return {}
+    sub_df = df.iloc[:, :max_cols].dropna(how="all")
+    cleaned = {}
+    for metric in sub_df.index[:15]:
+        row_data = {}
+        for col in sub_df.columns:
+            val = sub_df.loc[metric, col]
+            if pd.notna(val):
+                col_str = col.strftime("%Y-%m-%d") if hasattr(col, "strftime") else str(col)
+                if isinstance(val, (int, float, np.number)):
+                    row_data[col_str] = round(float(val), 2) if not math.isnan(val) else None
+                else:
+                    row_data[col_str] = str(val)
+        if row_data:
+            cleaned[str(metric)] = row_data
+    return cleaned
+
+
+def compute_growth_rates(q_financials: pd.DataFrame) -> dict:
+    if q_financials is None or q_financials.empty or len(q_financials.columns) < 2:
+        return {}
+
+    cols = list(q_financials.columns)
+    latest_col = cols[0]
+    prev_col = cols[1]
+    yoy_col = cols[4] if len(cols) >= 5 else None
+
+    results = {}
+    metric_candidates = {
+        "Revenue": ["Total Revenue", "Operating Revenue", "Revenue"],
+        "Net Income": ["Net Income", "Net Profit", "Net Income Common Stockholders"],
+        "EBITDA": ["EBITDA", "Normalized EBITDA", "Operating Income"]
+    }
+
+    for category, aliases in metric_candidates.items():
+        found_key = None
+        for alias in aliases:
+            if alias in q_financials.index:
+                found_key = alias
+                break
+
+        if found_key:
+            latest_val = q_financials.loc[found_key, latest_col]
+            prev_val = q_financials.loc[found_key, prev_col]
+
+            if pd.notna(latest_val) and pd.notna(prev_val) and prev_val != 0:
+                qoq_pct = round(((float(latest_val) - float(prev_val)) / abs(float(prev_val))) * 100, 2)
+            else:
+                qoq_pct = None
+
+            yoy_pct = None
+            if yoy_col and yoy_col in q_financials.columns:
+                yoy_val = q_financials.loc[found_key, yoy_col]
+                if pd.notna(latest_val) and pd.notna(yoy_val) and yoy_val != 0:
+                    yoy_pct = round(((float(latest_val) - float(yoy_val)) / abs(float(yoy_val))) * 100, 2)
+
+            results[category] = {
+                "metric_name": found_key,
+                "latest_quarter": latest_col.strftime("%Y-%m-%d") if hasattr(latest_col, "strftime") else str(latest_col),
+                "latest_value": round(float(latest_val), 2) if pd.notna(latest_val) else None,
+                "previous_quarter": prev_col.strftime("%Y-%m-%d") if hasattr(prev_col, "strftime") else str(prev_col),
+                "previous_value": round(float(prev_val), 2) if pd.notna(prev_val) else None,
+                "qoq_growth_pct": qoq_pct,
+                "yoy_growth_pct": yoy_pct,
+            }
+
+    return results
+
+
 @tool
 def get_financial_statements(symbol: str) -> str:
-    """Fetch balance sheet, income statement, and cash flow summary for a specific Indian stock."""
+    """Fetch annual and quarterly balance sheet, income statement, cash flow summary, plus YoY and QoQ growth rates for an Indian stock (NSE/BSE)."""
     norm_sym = normalize_indian_symbol(symbol)
     try:
         ticker = yf.Ticker(norm_sym)
-        financials = ticker.financials
+        annual_fin = ticker.financials
+        quarterly_fin = ticker.quarterly_financials
         balance_sheet = ticker.balance_sheet
-        cashflow = ticker.cashflow
+        quarterly_bs = ticker.quarterly_balance_sheet
+
+        growth_rates = compute_growth_rates(quarterly_fin)
 
         summary = {
             "symbol": norm_sym,
-            "financials_keys": list(financials.index[:10]) if financials is not None and not financials.empty else [],
-            "balance_sheet_keys": list(balance_sheet.index[:10]) if balance_sheet is not None and not balance_sheet.empty else [],
-            "cashflow_keys": list(cashflow.index[:10]) if cashflow is not None and not cashflow.empty else [],
-            "latest_financials": financials.iloc[:, :2].to_dict() if financials is not None and not financials.empty else {},
+            "quarterly_growth_metrics": growth_rates,
+            "annual_financials": format_df_to_clean_dict(annual_fin, max_cols=3),
+            "quarterly_financials": format_df_to_clean_dict(quarterly_fin, max_cols=4),
+            "balance_sheet": format_df_to_clean_dict(balance_sheet, max_cols=2),
+            "quarterly_balance_sheet": format_df_to_clean_dict(quarterly_bs, max_cols=2),
         }
         return json.dumps(summary, default=str, indent=2)
     except Exception as e:
         return json.dumps({"error": f"Failed to fetch financial statements for {symbol}: {str(e)}"})
+
 
 
 @tool

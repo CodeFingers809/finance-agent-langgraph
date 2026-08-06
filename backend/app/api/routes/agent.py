@@ -141,15 +141,6 @@ async def branch_conversation(
     )
     session.add(divider_orig)
 
-    new_start_ts = (orig_messages[0].created_at - timedelta(milliseconds=1)) if orig_messages else datetime.now(UTC)
-    divider_new = ChatMessage(
-        conversation_id=new_conv.id,
-        sender="agent",
-        content=f"[BRANCHED_FROM:{str(orig_conv.id)}:{orig_conv.title}]",
-        created_at=new_start_ts,
-    )
-    session.add(divider_new)
-
     for old_m in messages_to_copy:
         copied = ChatMessage(
             conversation_id=new_conv.id,
@@ -159,6 +150,15 @@ async def branch_conversation(
             created_at=old_m.created_at,
         )
         session.add(copied)
+
+    divider_new = ChatMessage(
+        conversation_id=new_conv.id,
+        sender="agent",
+        content=f"[BRANCHED_FROM:{str(orig_conv.id)}:{orig_conv.title}]",
+        created_at=divider_ts,
+    )
+    session.add(divider_new)
+
 
     session.commit()
     return {
