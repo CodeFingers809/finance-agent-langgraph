@@ -1,0 +1,52 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
+# SQLite & databases
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+app.db
+test.db
+backend/app.db
+backend/test.db
+
+# Agents, AI & Tooling
+.agents/
+.gemini/
+.gemini_security/
+.codegraph/
+AGENTS.md
+scratch/
+brain/
+artifacts/
+skills/
+configs/
+
+# Editor & OS files
+.vscode/
+.idea/
+.zed/
+.DS_Store
+*.swp
+*.tmp
+
+# Dependencies & Build/Cache files
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.tanstack/
+.vite/
+dist/
+build/
+coverage/
+backend/app/frontend/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
