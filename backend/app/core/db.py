@@ -5,8 +5,17 @@ from app.core.config import settings
 from app.core.security import get_password_hash
 from app.models import User, UserCreate
 
-connect_args = {"check_same_thread": False} if str(settings.SQLALCHEMY_DATABASE_URI).startswith("sqlite") else {}
-engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI), connect_args=connect_args)
+from pathlib import Path
+
+db_url = str(settings.SQLALCHEMY_DATABASE_URI)
+if db_url.startswith("sqlite"):
+    db_file_path = db_url.replace("sqlite:///", "").replace("./", "")
+    if db_file_path and "/" in db_file_path:
+        Path(db_file_path).parent.mkdir(parents=True, exist_ok=True)
+
+connect_args = {"check_same_thread": False} if db_url.startswith("sqlite") else {}
+engine = create_engine(db_url, connect_args=connect_args)
+
 
 
 def init_db(session: Session) -> None:
