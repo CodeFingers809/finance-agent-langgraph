@@ -1,13 +1,9 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router"
-
-import AppSidebar from "@/components/Sidebar/AppSidebar"
-import {
-  SidebarInset,
-  SidebarProvider,
-} from "@/components/ui/sidebar"
-import { isLoggedIn } from "@/hooks/useAuth"
 import { UsersService } from "@/client"
 import { HeaderControls } from "@/components/Common/HeaderControls"
+import AppSidebar from "@/components/Sidebar/AppSidebar"
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { isLoggedIn } from "@/hooks/useAuth"
 
 export const Route = createFileRoute("/_layout")({
   component: Layout,
@@ -19,7 +15,7 @@ export const Route = createFileRoute("/_layout")({
     }
     try {
       await UsersService.readUserMe()
-    } catch (err) {
+    } catch (_err) {
       localStorage.removeItem("access_token")
       throw redirect({
         to: "/login",
@@ -30,7 +26,10 @@ export const Route = createFileRoute("/_layout")({
 
 function Layout() {
   return (
-    <SidebarProvider defaultOpen={true} className="h-screen w-full flex overflow-hidden bg-[#FAF6F0]">
+    <SidebarProvider
+      defaultOpen={true}
+      className="h-screen w-full flex overflow-hidden bg-[#FAF6F0]"
+    >
       <AppSidebar />
       <SidebarInset className="bg-[#FAF6F0] text-[#27272A] flex flex-col h-screen flex-1 overflow-hidden m-0 rounded-none border-none shadow-none">
         <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center justify-between gap-4 border-b-2 border-[#27272A] px-6 bg-[#FAF6F0]">

@@ -9,6 +9,17 @@ import yfinance as yf
 from langchain_core.tools import tool
 from scipy.cluster.hierarchy import leaves_list, linkage
 
+try:
+    from sympy import sympify, latex as sympy_latex, factorial as sympy_factorial
+    from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
+except ImportError:
+    sympy = None
+
+try:
+    from duckduckgo_search import DDGS
+except ImportError:
+    DDGS = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -546,6 +557,58 @@ def create_user_watchlist(watchlist_name: str, symbols: list[str]) -> str:
         return json.dumps({"error": f"Failed to create user watchlist: {str(e)}"})
 
 
+@tool
+def calculate_scientific_expression(expression: str) -> str:
+    """
+    Safely evaluate scientific/mathematical expressions using SymPy symbolic math.
+    Supports: +, -, *, /, **, sqrt, log, log10, sin, cos, tan, exp, factorial.
+    Example: "2**10" returns {"result": 1024.0, "latex": "2^{10} = 1024", "error": null}
+    """
+    if not sympy:
+        return json.dumps({"error": "SymPy not installed"})
+
+    try:
+        transformations = standard_transformations + (implicit_multiplication_application,)
+        expr = parse_expr(expression, transformations=transformations)
+        result = float(expr.evalf())
+        latex_str = sympy_latex(expr)
+        return json.dumps({
+            "result": result,
+            "latex": f"{latex_str} = {result}",
+            "error": None
+        })
+    except Exception as e:
+        return json.dumps({"error": f"Failed to evaluate expression: {str(e)}"})
+
+
+@tool
+def search_web_for_stock_info(query: str, max_results: int = 5) -> str:
+    """
+    Search the web for stock-related news and information using DuckDuckGo (unofficial, free).
+    Returns list of {title, url, snippet, source}.
+    Example query: "Reliance Industries latest news" or "TCS quarterly results"
+    """
+    if not DDGS:
+        return json.dumps({"error": "duckduckgo-search not installed", "results": []})
+
+    try:
+        ddgs = DDGS()
+        results = ddgs.text(query, max_results=max_results)
+        formatted = [
+            {
+                "title": r.get("title", ""),
+                "url": r.get("href", ""),
+                "snippet": r.get("body", ""),
+                "source": "DuckDuckGo"
+            }
+            for r in results
+        ]
+        return json.dumps({"results": formatted, "error": None})
+    except Exception as e:
+        logger.warning(f"Web search failed for query '{query}': {str(e)}")
+        return json.dumps({"results": [], "error": f"Search failed: {str(e)}"})
+
+
 ALL_FINANCIAL_TOOLS = [
     get_stock_prices_and_metrics,
     get_financial_statements,
@@ -558,5 +621,7 @@ ALL_FINANCIAL_TOOLS = [
     get_market_news,
     get_user_portfolio,
     create_user_watchlist,
+    calculate_scientific_expression,
+    search_web_for_stock_info,
 ]
 

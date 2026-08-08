@@ -64,6 +64,7 @@ class User(UserBase, table=True):
     portfolios: list["Portfolio"] = Relationship(back_populates="user", cascade_delete=True)
     watchlists: list["Watchlist"] = Relationship(back_populates="user", cascade_delete=True)
     quota: Optional["UserQuota"] = Relationship(back_populates="user", cascade_delete=True)
+    research_reports: list["ResearchReport"] = Relationship(back_populates="user", cascade_delete=True)
 
 
 # Properties to return via API, id is always required
@@ -148,6 +149,7 @@ class UserQuota(SQLModel, table=True):
     daily_standard_count: int = Field(default=0)
     daily_upgraded_count: int = Field(default=0)
     last_reset_date: str = Field(default="")
+    last_research_request_date: str | None = Field(default=None)
     user: User | None = Relationship(back_populates="quota")
 
 
@@ -303,3 +305,29 @@ class WatchlistPublic(SQLModel):
     name: str
     created_at: datetime | None
     items: list[WatchlistItemPublic] = []
+
+
+# Research Report Models
+class ResearchReport(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(foreign_key="user.id", nullable=False, ondelete="CASCADE")
+    symbol: str = Field(max_length=50)
+    query: str = Field(max_length=1000)
+    markdown_report: str = Field(max_length=50000)
+    analyst_reports_json: str | None = Field(default=None)
+    created_at: datetime | None = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    created_by_model: str = Field(default="gpt-5.6-luna", max_length=100)
+    user: User | None = Relationship(back_populates="research_reports")
+
+
+class ResearchReportPublic(SQLModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    symbol: str
+    query: str
+    markdown_report: str
+    created_at: datetime | None
+    created_by_model: str

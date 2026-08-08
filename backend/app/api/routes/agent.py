@@ -2,13 +2,15 @@ import base64
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.agent.graph import stream_agent_events
+from app.agent.research_graph import stream_agent_events_research
 from app.api.deps import CurrentUser, SessionDep
 from app.core.db import engine
 from app.core.quota import check_and_update_quota, get_user_quota_status
@@ -18,6 +20,7 @@ from app.models import (
     Conversation,
     ConversationPublic,
     QuotaStatusPublic,
+    User,
 )
 from app.proto.financial_agent_pb2 import (
     HRPOptimizationResult,
@@ -131,13 +134,13 @@ async def branch_conversation(
     session.commit()
     session.refresh(new_conv)
 
-    divider_ts = (target_msg.created_at + timedelta(milliseconds=1)) if target_msg else datetime.now(UTC)
+    divider_ts_after = (target_msg.created_at + timedelta(milliseconds=1)) if target_msg else datetime.now(UTC)
 
     divider_orig = ChatMessage(
         conversation_id=conversation_id,
-        sender="agent",
+        sender="system",
         content=f"[BRANCHED_TO:{str(new_conv.id)}:{new_title}]",
-        created_at=divider_ts,
+        created_at=divider_ts_after,
     )
     session.add(divider_orig)
 
@@ -153,12 +156,11 @@ async def branch_conversation(
 
     divider_new = ChatMessage(
         conversation_id=new_conv.id,
-        sender="agent",
+        sender="system",
         content=f"[BRANCHED_FROM:{str(orig_conv.id)}:{orig_conv.title}]",
-        created_at=divider_ts,
+        created_at=divider_ts_after,
     )
     session.add(divider_new)
-
 
     session.commit()
     return {
@@ -184,7 +186,11 @@ async def delete_conversation(
 
 @router.options("/chat/stream")
 async def options_chat_stream():
-    return {}
+    return Response(status_code=204, headers={
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    })
 
 
 @router.post("/chat/stream")
@@ -335,5 +341,181 @@ async def chat_stream(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
         },
     )
+
+
+# ============================================================================
+# RESEARCH MODE ENDPOINT
+# ============================================================================
+
+class ResearchRequestPayload(BaseModel):
+    """Request payload for research mode (4-analyst synthesis)."""
+    query: str
+    model_name: str = "gpt-5.6-luna"
+
+
+@router.options("/research/stream")
+async def options_research_stream():
+    return Response(status_code=204, headers={
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    })
+
+
+@router.post("/research/stream")
+async def research_stream(
+    payload: ResearchRequestPayload,
+    session: SessionDep,
+    current_user: CurrentUser,
+):
+    """
+    Research mode endpoint: runs 4 analyst personas in sequence, then synthesizes.
+    
+    Yields SSE events:
+    - research_stage_update: analyst stage change (short_term, long_term, high_risk, low_risk, synthesize)
+    - text_chunk: final synthesis text streaming
+    - is_finished: completion marker
+    
+    Returns StreamingResponse with text/event-stream media type.
+    """
+    # Enforce quota
+    check_and_update_quota(session, current_user.id, payload.model_name)
+
+    # Create or retrieve research conversation (optional, for future multi-turn research)
+    title = f"Research: {payload.query[:40]}..."
+    research_conv = Conversation(user_id=current_user.id, title=title)
+    session.add(research_conv)
+    session.commit()
+    session.refresh(research_conv)
+    conv_id = research_conv.id
+
+    # Save research query
+    query_msg = ChatMessage(
+        conversation_id=conv_id,
+        sender="user",
+        content=payload.query,
+    )
+    session.add(query_msg)
+    session.commit()
+
+    accumulated_synthesis = []
+
+    async def event_generator():
+        nonlocal accumulated_synthesis
+
+        # Initial event: conversation context
+        init_event = StreamEvent(
+            event_id=str(uuid.uuid4()),
+            timestamp=datetime.now(UTC).isoformat(),
+            text_chunk=TextChunk(text=f"[RESEARCH_CONVERSATION_ID:{str(conv_id)}]")
+        )
+        init_b64 = base64.b64encode(init_event.SerializeToString()).decode("utf-8")
+        yield f"event: text_stream\ndata: {init_b64}\n\n"
+
+        # Stream research events
+        async for evt in stream_agent_events_research(
+            user_query=payload.query,
+            model_name=payload.model_name,
+        ):
+            event_id = str(uuid.uuid4())
+            ts = datetime.now(UTC).isoformat()
+            pb_event = StreamEvent(event_id=event_id, timestamp=ts)
+
+            evt_type = evt.get("type")
+
+            if evt_type == "research_stage_update":
+                # Analyst stage transition (informational only)
+                stage = evt.get("stage", "")
+                status = evt.get("status", "")
+                # Encode as text chunk for now (can extend proto if needed)
+                pb_event.text_chunk.CopyFrom(
+                    TextChunk(text=f"[RESEARCH_STAGE:{stage}:{status}]")
+                )
+                b64_data = base64.b64encode(pb_event.SerializeToString()).decode("utf-8")
+                yield f"event: text_stream\ndata: {b64_data}\n\n"
+
+            elif evt_type == "text_chunk":
+                # Final synthesis streaming
+                text = evt.get("text", "")
+                accumulated_synthesis.append(text)
+                pb_event.text_chunk.CopyFrom(TextChunk(text=text))
+                b64_data = base64.b64encode(pb_event.SerializeToString()).decode("utf-8")
+                yield f"event: text_stream\ndata: {b64_data}\n\n"
+
+            elif evt_type == "error_message":
+                # Error event
+                pb_event.error_message = evt.get("error", "Research error")
+                b64_data = base64.b64encode(pb_event.SerializeToString()).decode("utf-8")
+                yield f"event: tool_event\ndata: {b64_data}\n\n"
+
+            elif evt_type == "is_finished":
+                # Completion marker
+                pb_event.is_finished = True
+                b64_data = base64.b64encode(pb_event.SerializeToString()).decode("utf-8")
+                yield f"event: tool_event\ndata: {b64_data}\n\n"
+
+        # Save complete research synthesis to DB
+        with Session(engine) as db_session:
+            full_synthesis = "".join(accumulated_synthesis)
+            if full_synthesis.strip():
+                synthesis_msg = ChatMessage(
+                    conversation_id=conv_id,
+                    sender="agent",
+                    content=full_synthesis,
+                    metadata_json=json.dumps({"mode": "research", "version": "4_analysts"}),
+                )
+                db_session.add(synthesis_msg)
+                research_record = db_session.get(Conversation, conv_id)
+                if research_record:
+                    research_record.updated_at = datetime.now(UTC)
+                    db_session.add(research_record)
+                db_session.commit()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        },
+    )
+
+
+# ============================================================================
+# ADMIN ENDPOINTS: Observability
+# ============================================================================
+
+
+@router.get("/admin/langsmith/stats", tags=["admin"])
+async def get_langsmith_stats_endpoint(
+    current_user: CurrentUser,
+) -> dict[str, Any]:
+    """
+    Get LangSmith observability stats (superuser only).
+
+    Returns aggregated stats from last 7 days of runs:
+    - total_runs, avg_latency_ms, token usage, error_rate
+    - top tools and models
+    - cached 5 minutes to avoid free-tier quota hammering
+
+    Requires superuser role.
+    """
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required",
+        )
+
+    from app.core.langsmith_client import get_langsmith_stats
+
+    stats = await get_langsmith_stats()
+    return stats

@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from "react"
-import { Search, ExternalLink, Zap } from "lucide-react"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
+import { ExternalLink, Search, Zap } from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { OpenAPI } from "@/client"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 
 interface SearchStockResult {
   symbol: string
@@ -27,7 +27,7 @@ export function HeaderControls() {
 
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  const fetchQuota = async () => {
+  const fetchQuota = useCallback(async () => {
     try {
       const token = localStorage.getItem("access_token")
       if (!token) return
@@ -43,13 +43,14 @@ export function HeaderControls() {
     } catch (err) {
       console.error("Quota fetch error", err)
     }
-  }
+  }, [])
 
+  // Fetch quota on mount; refetch every 5 minutes (stop aggressive 15s polling)
   useEffect(() => {
     fetchQuota()
-    const interval = setInterval(fetchQuota, 15000)
+    const interval = setInterval(fetchQuota, 5 * 60 * 1000) // 5 minutes, not 15 seconds
     return () => clearInterval(interval)
-  }, [])
+  }, [fetchQuota])
 
   // Live stock search API lookup with debouncing
   useEffect(() => {
@@ -61,7 +62,9 @@ export function HeaderControls() {
     const timer = setTimeout(async () => {
       try {
         setIsLoading(true)
-        const res = await fetch(`${OpenAPI.BASE}/api/v1/utils/stock-search?q=${encodeURIComponent(searchSymbol.trim())}`)
+        const res = await fetch(
+          `${OpenAPI.BASE}/api/v1/utils/stock-search?q=${encodeURIComponent(searchSymbol.trim())}`,
+        )
         if (res.ok) {
           const data: SearchStockResult[] = await res.json()
           setSearchResults(data.slice(0, 6))
@@ -78,7 +81,10 @@ export function HeaderControls() {
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node)
+      ) {
         setIsOpen(false)
       }
     }
@@ -87,7 +93,10 @@ export function HeaderControls() {
   }, [])
 
   const handleSelectStock = (symbol: string) => {
-    window.open(`https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}`, "_blank")
+    window.open(
+      `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}`,
+      "_blank",
+    )
     setSearchSymbol("")
     setIsOpen(false)
   }
@@ -99,7 +108,10 @@ export function HeaderControls() {
     if (!sym.startsWith("^") && !sym.endsWith(".NS") && !sym.endsWith(".BO")) {
       sym = `${sym}.NS`
     }
-    window.open(`https://finance.yahoo.com/quote/${encodeURIComponent(sym)}`, "_blank")
+    window.open(
+      `https://finance.yahoo.com/quote/${encodeURIComponent(sym)}`,
+      "_blank",
+    )
     setSearchSymbol("")
     setIsOpen(false)
   }
@@ -108,7 +120,10 @@ export function HeaderControls() {
     <div className="flex flex-1 items-center justify-between gap-4">
       {/* Search Bar with Live Yahoo Search Dropdown */}
       <div ref={dropdownRef} className="relative flex-1 max-w-md">
-        <form onSubmit={handleSubmitSearch} className="relative flex items-center">
+        <form
+          onSubmit={handleSubmitSearch}
+          className="relative flex items-center"
+        >
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-[#27272A]" />
           <Input
             type="text"
@@ -124,10 +139,12 @@ export function HeaderControls() {
         </form>
 
         {/* Live Search Results Dropdown */}
-        {isOpen && (searchSymbol.trim().length > 0) && (
+        {isOpen && searchSymbol.trim().length > 0 && (
           <div className="absolute top-11 left-0 right-0 z-50 bg-white border-2 border-[#27272A] shadow-[4px_4px_0px_#27272A] rounded-md overflow-hidden py-1">
             {isLoading ? (
-              <div className="p-3 text-center text-xs text-[#52525B] font-semibold italic">Searching Yahoo Finance...</div>
+              <div className="p-3 text-center text-xs text-[#52525B] font-semibold italic">
+                Searching Yahoo Finance...
+              </div>
             ) : searchResults.length > 0 ? (
               searchResults.map((stock) => (
                 <button
@@ -137,14 +154,21 @@ export function HeaderControls() {
                   className="w-full px-3 py-2 text-left flex items-center justify-between hover:bg-amber-100 transition-colors text-xs border-b border-muted/50 last:border-0"
                 >
                   <div className="min-w-0 pr-2">
-                    <div className="font-extrabold text-[#27272A] truncate">{stock.name}</div>
-                    <div className="text-[11px] font-mono text-[#52525B]">{stock.symbol} {stock.exchange ? `• ${stock.exchange}` : ""}</div>
+                    <div className="font-extrabold text-[#27272A] truncate">
+                      {stock.name}
+                    </div>
+                    <div className="text-[11px] font-mono text-[#52525B]">
+                      {stock.symbol}{" "}
+                      {stock.exchange ? `• ${stock.exchange}` : ""}
+                    </div>
                   </div>
                   <ExternalLink className="h-3.5 w-3.5 text-[#2563EB] shrink-0" />
                 </button>
               ))
             ) : (
-              <div className="p-3 text-center text-xs text-[#52525B] italic">No matching stocks found. Press Enter to search symbol.</div>
+              <div className="p-3 text-center text-xs text-[#52525B] italic">
+                No matching stocks found. Press Enter to search symbol.
+              </div>
             )}
           </div>
         )}
@@ -155,7 +179,9 @@ export function HeaderControls() {
         {quota && (
           <Badge className="gap-1 font-bold text-[11px] bg-amber-200 text-[#27272A] border-1.5 border-[#27272A] shadow-[1.5px_1.5px_0px_#27272A]">
             <Zap className="h-3 w-3 fill-[#27272A]" />
-            Standard: {quota.standard_remaining_today}/{quota.standard_limit_today} | Upgraded: {quota.upgraded_remaining_today}/{quota.upgraded_limit_today}
+            Standard: {quota.standard_remaining_today}/
+            {quota.standard_limit_today} | Upgraded:{" "}
+            {quota.upgraded_remaining_today}/{quota.upgraded_limit_today}
           </Badge>
         )}
       </div>

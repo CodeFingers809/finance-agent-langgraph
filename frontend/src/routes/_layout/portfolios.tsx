@@ -1,23 +1,21 @@
-import { useState, useEffect } from "react"
-import { createFileRoute } from "@tanstack/react-router"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { createFileRoute } from "@tanstack/react-router"
 import {
-  Plus,
-  Trash2,
-  ExternalLink,
-  TrendingUp,
   DollarSign,
-  ShieldCheck,
-  Zap,
-  Search,
+  ExternalLink,
   Pencil,
+  Plus,
+  Search,
+  ShieldCheck,
+  Trash2,
+  TrendingUp,
+  Zap,
 } from "lucide-react"
-
+import { useEffect, useState } from "react"
+import { OpenAPI } from "@/client"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
   DialogContent,
@@ -25,8 +23,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import useCustomToast from "@/hooks/useCustomToast"
-import { OpenAPI } from "@/client"
 
 export const Route = createFileRoute("/_layout/portfolios")({
   component: PortfoliosPage,
@@ -106,9 +105,12 @@ function PortfoliosPage() {
     queryKey: ["portfolio_metrics", portfolio?.id],
     enabled: !!portfolio?.id,
     queryFn: async () => {
-      const res = await fetch(`${OpenAPI.BASE}/api/v1/portfolios/${portfolio!.id}/metrics`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const res = await fetch(
+        `${OpenAPI.BASE}/api/v1/portfolios/${portfolio!.id}/metrics`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      )
       if (!res.ok) return null
       return (await res.json()) as PortfolioMetrics
     },
@@ -143,7 +145,9 @@ function PortfoliosPage() {
 
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`${OpenAPI.BASE}/api/v1/utils/stock-search?q=${encodeURIComponent(symbolSearchInput.trim())}`)
+        const res = await fetch(
+          `${OpenAPI.BASE}/api/v1/utils/stock-search?q=${encodeURIComponent(symbolSearchInput.trim())}`,
+        )
         if (res.ok) {
           const data = await res.json()
           setSearchResults(data.slice(0, 5))
@@ -161,24 +165,29 @@ function PortfoliosPage() {
     if (!portfolio || !selectedStock || !quantity || !buyPrice) return
 
     if (selectedStock.symbol.startsWith("^")) {
-      showErrorToast("Indices cannot be added to portfolios. Stock equities only.")
+      showErrorToast(
+        "Indices cannot be added to portfolios. Stock equities only.",
+      )
       return
     }
 
     try {
-      const res = await fetch(`${OpenAPI.BASE}/api/v1/portfolios/${portfolio.id}/items`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      const res = await fetch(
+        `${OpenAPI.BASE}/api/v1/portfolios/${portfolio.id}/items`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            symbol: selectedStock.symbol,
+            quantity: parseFloat(quantity),
+            buy_price: parseFloat(buyPrice),
+            bought_at: boughtAt.trim() || null,
+          }),
         },
-        body: JSON.stringify({
-          symbol: selectedStock.symbol,
-          quantity: parseFloat(quantity),
-          buy_price: parseFloat(buyPrice),
-          bought_at: boughtAt.trim() || null,
-        }),
-      })
+      )
 
       if (res.ok) {
         setSymbolSearchInput("")
@@ -194,7 +203,7 @@ function PortfoliosPage() {
         const errJson = await res.json().catch(() => ({}))
         showErrorToast(errJson.detail || "Failed to add stock holding")
       }
-    } catch (err) {
+    } catch (_err) {
       showErrorToast("Failed to add stock holding")
     }
   }
@@ -210,19 +219,22 @@ function PortfoliosPage() {
     if (!portfolio || !editingItem || !editQuantity || !editBuyPrice) return
 
     try {
-      const res = await fetch(`${OpenAPI.BASE}/api/v1/portfolios/${portfolio.id}/items/${editingItem.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      const res = await fetch(
+        `${OpenAPI.BASE}/api/v1/portfolios/${portfolio.id}/items/${editingItem.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            symbol: editingItem.symbol,
+            quantity: parseFloat(editQuantity),
+            buy_price: parseFloat(editBuyPrice),
+            avg_price: parseFloat(editBuyPrice),
+          }),
         },
-        body: JSON.stringify({
-          symbol: editingItem.symbol,
-          quantity: parseFloat(editQuantity),
-          buy_price: parseFloat(editBuyPrice),
-          avg_price: parseFloat(editBuyPrice),
-        }),
-      })
+      )
 
       if (res.ok) {
         setEditingItem(null)
@@ -233,7 +245,7 @@ function PortfoliosPage() {
         const errJson = await res.json().catch(() => ({}))
         showErrorToast(errJson.detail || "Failed to update holding")
       }
-    } catch (err) {
+    } catch (_err) {
       showErrorToast("Failed to update stock holding")
     }
   }
@@ -241,16 +253,19 @@ function PortfoliosPage() {
   const handleDeleteItem = async (itemId: string) => {
     if (!portfolio) return
     try {
-      const res = await fetch(`${OpenAPI.BASE}/api/v1/portfolios/${portfolio.id}/items/${itemId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const res = await fetch(
+        `${OpenAPI.BASE}/api/v1/portfolios/${portfolio.id}/items/${itemId}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      )
       if (res.ok) {
         showSuccessToast("Holding removed")
         queryClient.invalidateQueries({ queryKey: ["portfolio"] })
         queryClient.invalidateQueries({ queryKey: ["portfolio_metrics"] })
       }
-    } catch (err) {
+    } catch (_err) {
       showErrorToast("Failed to delete item")
     }
   }
@@ -264,7 +279,8 @@ function PortfoliosPage() {
             {portfolio ? portfolio.name : "Portfolio Holdings"}
           </h1>
           <p className="text-xs text-[#52525B]">
-            Track investment performance, individual stock returns, and risk-adjusted metrics
+            Track investment performance, individual stock returns, and
+            risk-adjusted metrics
           </p>
         </div>
 
@@ -284,7 +300,9 @@ function PortfoliosPage() {
 
             <form onSubmit={handleAddStock} className="space-y-4 pt-2">
               <div className="space-y-1.5 relative">
-                <Label className="text-xs font-bold text-[#27272A]">Search Stock (NSE/BSE Only)</Label>
+                <Label className="text-xs font-bold text-[#27272A]">
+                  Search Stock (NSE/BSE Only)
+                </Label>
                 <div className="relative">
                   <Input
                     placeholder="e.g. RELIANCE, MAZDOCK, TCS..."
@@ -309,8 +327,12 @@ function PortfoliosPage() {
                         className="p-2.5 hover:bg-amber-100 cursor-pointer flex items-center justify-between text-xs transition-colors"
                       >
                         <div>
-                          <span className="font-extrabold text-[#27272A] block">{item.name}</span>
-                          <span className="text-[10px] text-gray-500 font-mono">{item.symbol}</span>
+                          <span className="font-extrabold text-[#27272A] block">
+                            {item.name}
+                          </span>
+                          <span className="text-[10px] text-gray-500 font-mono">
+                            {item.symbol}
+                          </span>
                         </div>
                         <Badge className="text-[10px] bg-amber-200 text-[#27272A] border border-[#27272A]">
                           {item.exchange}
@@ -323,15 +345,21 @@ function PortfoliosPage() {
                 {selectedStock && (
                   <div className="bg-amber-100/70 border border-[#27272A] p-2 rounded text-xs flex justify-between items-center mt-1">
                     <div>
-                      <span className="font-extrabold text-[#27272A]">{selectedStock.name}</span>
-                      <span className="font-mono text-[10px] block text-gray-600">{selectedStock.symbol}</span>
+                      <span className="font-extrabold text-[#27272A]">
+                        {selectedStock.name}
+                      </span>
+                      <span className="font-mono text-[10px] block text-gray-600">
+                        {selectedStock.symbol}
+                      </span>
                     </div>
                   </div>
                 )}
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-[#27272A]">Quantity</Label>
+                <Label className="text-xs font-bold text-[#27272A]">
+                  Quantity
+                </Label>
                 <Input
                   type="number"
                   step="any"
@@ -344,7 +372,9 @@ function PortfoliosPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-[#27272A]">Buy Price (₹)</Label>
+                <Label className="text-xs font-bold text-[#27272A]">
+                  Buy Price (₹)
+                </Label>
                 <Input
                   type="number"
                   step="any"
@@ -357,7 +387,9 @@ function PortfoliosPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-[#27272A]">Date Bought (Optional)</Label>
+                <Label className="text-xs font-bold text-[#27272A]">
+                  Date Bought (Optional)
+                </Label>
                 <Input
                   type="date"
                   value={boughtAt}
@@ -366,7 +398,11 @@ function PortfoliosPage() {
                 />
               </div>
 
-              <Button type="submit" disabled={!selectedStock} className="w-full neubrutal-btn-primary text-xs mt-2">
+              <Button
+                type="submit"
+                disabled={!selectedStock}
+                className="w-full neubrutal-btn-primary text-xs mt-2"
+              >
                 Add Stock Holding
               </Button>
             </form>
@@ -375,7 +411,10 @@ function PortfoliosPage() {
       </div>
 
       {/* Edit Holding Dialog */}
-      <Dialog open={!!editingItem} onOpenChange={(open) => !open && setEditingItem(null)}>
+      <Dialog
+        open={!!editingItem}
+        onOpenChange={(open) => !open && setEditingItem(null)}
+      >
         <DialogContent className="bg-white border-2 border-[#27272A] shadow-[4px_4px_0px_#27272A] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="font-display font-extrabold text-lg text-[#27272A]">
@@ -385,7 +424,9 @@ function PortfoliosPage() {
 
           <form onSubmit={handleUpdateStock} className="space-y-4 pt-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-[#27272A]">Quantity</Label>
+              <Label className="text-xs font-bold text-[#27272A]">
+                Quantity
+              </Label>
               <Input
                 type="number"
                 step="any"
@@ -397,7 +438,9 @@ function PortfoliosPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-[#27272A]">Average Buy Price (₹)</Label>
+              <Label className="text-xs font-bold text-[#27272A]">
+                Average Buy Price (₹)
+              </Label>
               <Input
                 type="number"
                 step="any"
@@ -408,7 +451,10 @@ function PortfoliosPage() {
               />
             </div>
 
-            <Button type="submit" className="w-full neubrutal-btn-primary text-xs mt-2">
+            <Button
+              type="submit"
+              className="w-full neubrutal-btn-primary text-xs mt-2"
+            >
               Save Changes
             </Button>
           </form>
@@ -419,7 +465,9 @@ function PortfoliosPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-white border-2 border-[#27272A] shadow-[3px_3px_0px_#27272A] rounded-lg">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-bold text-[#52525B]">TOTAL INVESTED</CardTitle>
+            <CardTitle className="text-xs font-bold text-[#52525B]">
+              TOTAL INVESTED
+            </CardTitle>
             <DollarSign className="h-4 w-4 text-[#27272A]" />
           </CardHeader>
           <CardContent>
@@ -431,7 +479,9 @@ function PortfoliosPage() {
 
         <Card className="bg-white border-2 border-[#27272A] shadow-[3px_3px_0px_#27272A] rounded-lg">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-bold text-[#52525B]">CURRENT VALUE</CardTitle>
+            <CardTitle className="text-xs font-bold text-[#52525B]">
+              CURRENT VALUE
+            </CardTitle>
             <TrendingUp className="h-4 w-4 text-[#2563EB]" />
           </CardHeader>
           <CardContent>
@@ -439,8 +489,12 @@ function PortfoliosPage() {
               ₹{metrics ? metrics.current_value.toLocaleString() : "0"}
             </div>
             {metrics && (
-              <span className={`text-xs font-bold ${metrics.total_return >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
-                {metrics.total_return >= 0 ? "+" : ""}₹{metrics.total_return.toLocaleString()} ({metrics.total_return_pct}%)
+              <span
+                className={`text-xs font-bold ${metrics.total_return >= 0 ? "text-emerald-700" : "text-rose-700"}`}
+              >
+                {metrics.total_return >= 0 ? "+" : ""}₹
+                {metrics.total_return.toLocaleString()} (
+                {metrics.total_return_pct}%)
               </span>
             )}
           </CardContent>
@@ -448,12 +502,15 @@ function PortfoliosPage() {
 
         <Card className="bg-white border-2 border-[#27272A] shadow-[3px_3px_0px_#27272A] rounded-lg">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-bold text-[#52525B]">SHARPE / SORTINO</CardTitle>
+            <CardTitle className="text-xs font-bold text-[#52525B]">
+              SHARPE / SORTINO
+            </CardTitle>
             <ShieldCheck className="h-4 w-4 text-[#2563EB]" />
           </CardHeader>
           <CardContent>
             <div className="text-lg font-display font-extrabold text-[#27272A]">
-              S: {metrics?.sharpe_ratio ?? "N/A"} | So: {metrics?.sortino_ratio ?? "N/A"}
+              S: {metrics?.sharpe_ratio ?? "N/A"} | So:{" "}
+              {metrics?.sortino_ratio ?? "N/A"}
             </div>
             <p className="text-[11px] text-[#52525B]">Risk-adjusted returns</p>
           </CardContent>
@@ -461,12 +518,15 @@ function PortfoliosPage() {
 
         <Card className="bg-white border-2 border-[#27272A] shadow-[3px_3px_0px_#27272A] rounded-lg">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-bold text-[#52525B]">BETA / ALPHA</CardTitle>
+            <CardTitle className="text-xs font-bold text-[#52525B]">
+              BETA / ALPHA
+            </CardTitle>
             <Zap className="h-4 w-4 text-amber-600" />
           </CardHeader>
           <CardContent>
             <div className="text-lg font-display font-extrabold text-[#27272A]">
-              β: {metrics?.beta ?? "1.0"} | α: {metrics?.alpha ? `${metrics.alpha}%` : "0%"}
+              β: {metrics?.beta ?? "1.0"} | α:{" "}
+              {metrics?.alpha ? `${metrics.alpha}%` : "0%"}
             </div>
             <p className="text-[11px] text-[#52525B]">vs NIFTY 50 Benchmark</p>
           </CardContent>
@@ -477,8 +537,13 @@ function PortfoliosPage() {
       <div className="bg-white border-2 border-[#27272A] shadow-[4px_4px_0px_#27272A] rounded-xl overflow-hidden p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-display font-extrabold text-[#27272A]">Stock Holdings</h2>
-            <p className="text-xs text-[#52525B]">Individual stock returns, investment performance, and holding edit controls.</p>
+            <h2 className="text-xl font-display font-extrabold text-[#27272A]">
+              Stock Holdings
+            </h2>
+            <p className="text-xs text-[#52525B]">
+              Individual stock returns, investment performance, and holding edit
+              controls.
+            </p>
           </div>
         </div>
 
@@ -503,13 +568,20 @@ function PortfoliosPage() {
                   const companyName = qData?.name || item.symbol
                   const ltp = qData?.ltp || item.avg_price || item.buy_price
 
-                  const investedVal = item.quantity * (item.avg_price || item.buy_price)
+                  const investedVal =
+                    item.quantity * (item.avg_price || item.buy_price)
                   const currentVal = item.quantity * ltp
                   const gainLoss = currentVal - investedVal
-                  const retPct = investedVal > 0 ? ((gainLoss / investedVal) * 100).toFixed(2) : "0.00"
+                  const retPct =
+                    investedVal > 0
+                      ? ((gainLoss / investedVal) * 100).toFixed(2)
+                      : "0.00"
 
                   return (
-                    <tr key={item.id} className="hover:bg-amber-50/50 transition-colors">
+                    <tr
+                      key={item.id}
+                      className="hover:bg-amber-50/50 transition-colors"
+                    >
                       <td className="p-3 font-bold">
                         <a
                           href={`https://finance.yahoo.com/quote/${encodeURIComponent(item.symbol)}`}
@@ -518,18 +590,35 @@ function PortfoliosPage() {
                           className="text-[#2563EB] hover:underline flex items-center gap-1.5"
                         >
                           <span>{companyName}</span>
-                          <span className="text-[10px] font-mono text-[#52525B] border border-[#27272A] px-1 rounded bg-[#FAF6F0]">{item.symbol}</span>
+                          <span className="text-[10px] font-mono text-[#52525B] border border-[#27272A] px-1 rounded bg-[#FAF6F0]">
+                            {item.symbol}
+                          </span>
                           <ExternalLink className="h-3 w-3 shrink-0" />
                         </a>
                       </td>
-                      <td className="p-3 font-bold font-mono text-right">{item.quantity}</td>
-                      <td className="p-3 font-bold font-mono text-right">₹{(item.avg_price || item.buy_price).toLocaleString()}</td>
-                      <td className="p-3 font-bold font-mono text-right text-[#2563EB]">₹{ltp.toLocaleString()}</td>
-                      <td className="p-3 font-bold font-mono text-right">₹{investedVal.toLocaleString()}</td>
-                      <td className="p-3 font-bold font-mono text-right">₹{currentVal.toLocaleString()}</td>
                       <td className="p-3 font-bold font-mono text-right">
-                        <span className={gainLoss >= 0 ? "text-emerald-700" : "text-rose-700"}>
-                          {gainLoss >= 0 ? "+" : ""}₹{Math.abs(gainLoss).toLocaleString()} ({retPct}%)
+                        {item.quantity}
+                      </td>
+                      <td className="p-3 font-bold font-mono text-right">
+                        ₹{(item.avg_price || item.buy_price).toLocaleString()}
+                      </td>
+                      <td className="p-3 font-bold font-mono text-right text-[#2563EB]">
+                        ₹{ltp.toLocaleString()}
+                      </td>
+                      <td className="p-3 font-bold font-mono text-right">
+                        ₹{investedVal.toLocaleString()}
+                      </td>
+                      <td className="p-3 font-bold font-mono text-right">
+                        ₹{currentVal.toLocaleString()}
+                      </td>
+                      <td className="p-3 font-bold font-mono text-right">
+                        <span
+                          className={
+                            gainLoss >= 0 ? "text-emerald-700" : "text-rose-700"
+                          }
+                        >
+                          {gainLoss >= 0 ? "+" : ""}₹
+                          {Math.abs(gainLoss).toLocaleString()} ({retPct}%)
                         </span>
                       </td>
                       <td className="p-3 text-right">
@@ -559,8 +648,12 @@ function PortfoliosPage() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-xs text-[#52525B] italic font-semibold">
-                    No stock holdings added to your portfolio yet. Click "Add Stock Holding" above to start tracking.
+                  <td
+                    colSpan={8}
+                    className="p-8 text-center text-xs text-[#52525B] italic font-semibold"
+                  >
+                    No stock holdings added to your portfolio yet. Click "Add
+                    Stock Holding" above to start tracking.
                   </td>
                 </tr>
               )}

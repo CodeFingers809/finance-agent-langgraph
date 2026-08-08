@@ -1,20 +1,17 @@
-import { useState, useEffect } from "react"
-import { createFileRoute } from "@tanstack/react-router"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { createFileRoute } from "@tanstack/react-router"
 import {
-  Plus,
-  Trash2,
   ExternalLink,
-  Search,
   Eye,
   FolderPlus,
+  Plus,
+  Search,
+  Trash2,
 } from "lucide-react"
-
-import { Button } from "@/components/ui/button"
-
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { useEffect, useState } from "react"
+import { OpenAPI } from "@/client"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -22,7 +19,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { OpenAPI } from "@/client"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
 export const Route = createFileRoute("/_layout/watchlists")({
   component: WatchlistsPage,
@@ -50,7 +48,9 @@ interface StockQuoteData {
 
 function WatchlistsPage() {
   const queryClient = useQueryClient()
-  const [selectedWatchlistId, setSelectedWatchlistId] = useState<string | null>(null)
+  const [selectedWatchlistId, setSelectedWatchlistId] = useState<string | null>(
+    null,
+  )
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   // Dialog states
@@ -113,7 +113,9 @@ function WatchlistsPage() {
 
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`${OpenAPI.BASE}/api/v1/utils/stock-search?q=${encodeURIComponent(stockSymbol.trim())}`)
+        const res = await fetch(
+          `${OpenAPI.BASE}/api/v1/utils/stock-search?q=${encodeURIComponent(stockSymbol.trim())}`,
+        )
         if (res.ok) {
           const data = await res.json()
           setSearchResults(data.slice(0, 5))
@@ -149,7 +151,7 @@ function WatchlistsPage() {
         const errJson = await res.json().catch(() => ({}))
         setErrorMessage(errJson.detail || "Failed to create watchlist")
       }
-    } catch (err) {
+    } catch (_err) {
       setErrorMessage("Failed to create watchlist")
     }
   }
@@ -158,14 +160,17 @@ function WatchlistsPage() {
     if (!selectedWatchlistId || !selectedStock) return
     setErrorMessage(null)
     try {
-      const res = await fetch(`${OpenAPI.BASE}/api/v1/watchlists/${selectedWatchlistId}/items`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      const res = await fetch(
+        `${OpenAPI.BASE}/api/v1/watchlists/${selectedWatchlistId}/items`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ symbol: selectedStock.symbol }),
         },
-        body: JSON.stringify({ symbol: selectedStock.symbol }),
-      })
+      )
 
       if (res.ok) {
         setStockSymbol("")
@@ -176,7 +181,7 @@ function WatchlistsPage() {
         const errJson = await res.json().catch(() => ({}))
         setErrorMessage(errJson.detail || "Failed to add stock to watchlist")
       }
-    } catch (err) {
+    } catch (_err) {
       setErrorMessage("Failed to add stock to watchlist")
     }
   }
@@ -184,10 +189,13 @@ function WatchlistsPage() {
   const handleDeleteItem = async (itemId: string) => {
     if (!selectedWatchlistId) return
     try {
-      const res = await fetch(`${OpenAPI.BASE}/api/v1/watchlists/${selectedWatchlistId}/items/${itemId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const res = await fetch(
+        `${OpenAPI.BASE}/api/v1/watchlists/${selectedWatchlistId}/items/${itemId}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      )
       if (res.ok) {
         queryClient.invalidateQueries({ queryKey: ["watchlists"] })
       }
@@ -198,10 +206,13 @@ function WatchlistsPage() {
 
   const handleDeleteWatchlist = async (watchlistId: string) => {
     try {
-      const res = await fetch(`${OpenAPI.BASE}/api/v1/watchlists/${watchlistId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const res = await fetch(
+        `${OpenAPI.BASE}/api/v1/watchlists/${watchlistId}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      )
       if (res.ok) {
         if (selectedWatchlistId === watchlistId) {
           setSelectedWatchlistId(null)
@@ -222,7 +233,8 @@ function WatchlistsPage() {
             Custom Watchlists
           </h1>
           <p className="text-xs text-[#52525B]">
-            Monitor price movements and daily changes across your favorite stock groups
+            Monitor price movements and daily changes across your favorite stock
+            groups
           </p>
         </div>
 
@@ -248,7 +260,9 @@ function WatchlistsPage() {
               )}
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-[#27272A]">Watchlist Name</Label>
+                <Label className="text-xs font-bold text-[#27272A]">
+                  Watchlist Name
+                </Label>
                 <Input
                   placeholder="e.g. Defense Stocks, High Growth Tech..."
                   value={newWatchlistName}
@@ -283,7 +297,9 @@ function WatchlistsPage() {
                   : "bg-white text-[#27272A] hover:bg-amber-100 shadow-[2px_2px_0px_#27272A]"
               }`}
             >
-              <Eye className={`h-3.5 w-3.5 ${isSelected ? "text-white" : "text-[#2563EB]"}`} />
+              <Eye
+                className={`h-3.5 w-3.5 ${isSelected ? "text-white" : "text-[#2563EB]"}`}
+              />
               <span>{wl.name}</span>
               <Badge
                 className={`text-[10px] px-1.5 py-0.2 ${
@@ -301,7 +317,9 @@ function WatchlistsPage() {
                   handleDeleteWatchlist(wl.id)
                 }}
                 className={`p-1 rounded hover:bg-black/10 transition-colors ml-1 ${
-                  isSelected ? "text-white hover:text-white" : "text-rose-600 hover:text-rose-800"
+                  isSelected
+                    ? "text-white hover:text-white"
+                    : "text-rose-600 hover:text-rose-800"
                 }`}
                 title="Delete Watchlist"
               >
@@ -334,7 +352,10 @@ function WatchlistsPage() {
             {/* Add Stock to Watchlist Dialog */}
             <Dialog open={isAddStockOpen} onOpenChange={setIsAddStockOpen}>
               <DialogTrigger asChild>
-                <Button size="sm" className="neubrutal-btn-primary gap-1.5 text-xs">
+                <Button
+                  size="sm"
+                  className="neubrutal-btn-primary gap-1.5 text-xs"
+                >
                   <Plus className="h-3.5 w-3.5" /> Add Stock Symbol
                 </Button>
               </DialogTrigger>
@@ -353,7 +374,9 @@ function WatchlistsPage() {
                   )}
 
                   <div className="space-y-1.5 relative">
-                    <Label className="text-xs font-bold text-[#27272A]">Search Stock Symbol</Label>
+                    <Label className="text-xs font-bold text-[#27272A]">
+                      Search Stock Symbol
+                    </Label>
                     <div className="relative">
                       <Input
                         placeholder="Search NSE/BSE stock or index..."
@@ -378,8 +401,12 @@ function WatchlistsPage() {
                             className="p-2.5 hover:bg-amber-100 cursor-pointer flex items-center justify-between text-xs transition-colors"
                           >
                             <div>
-                              <span className="font-extrabold text-[#27272A] block">{item.name}</span>
-                              <span className="text-[10px] text-gray-500 font-mono">{item.symbol}</span>
+                              <span className="font-extrabold text-[#27272A] block">
+                                {item.name}
+                              </span>
+                              <span className="text-[10px] text-gray-500 font-mono">
+                                {item.symbol}
+                              </span>
                             </div>
                             <Badge className="text-[10px] bg-amber-200 text-[#27272A] border border-[#27272A]">
                               {item.exchange}
@@ -392,8 +419,12 @@ function WatchlistsPage() {
                     {selectedStock && (
                       <div className="bg-amber-100/70 border border-[#27272A] p-2 rounded text-xs flex justify-between items-center mt-1">
                         <div>
-                          <span className="font-extrabold text-[#27272A]">{selectedStock.name}</span>
-                          <span className="font-mono text-[10px] block text-gray-600">{selectedStock.symbol}</span>
+                          <span className="font-extrabold text-[#27272A]">
+                            {selectedStock.name}
+                          </span>
+                          <span className="font-mono text-[10px] block text-gray-600">
+                            {selectedStock.symbol}
+                          </span>
                         </div>
                       </div>
                     )}
@@ -431,7 +462,10 @@ function WatchlistsPage() {
                     const changePct = qData?.change_1d_pct
 
                     return (
-                      <tr key={item.id} className="hover:bg-amber-50/50 transition-colors">
+                      <tr
+                        key={item.id}
+                        className="hover:bg-amber-50/50 transition-colors"
+                      >
                         <td className="p-3 font-bold">
                           <a
                             href={`https://finance.yahoo.com/quote/${encodeURIComponent(item.symbol)}`}
@@ -451,8 +485,15 @@ function WatchlistsPage() {
                         </td>
                         <td className="p-3 font-bold font-mono text-right">
                           {changePct !== undefined ? (
-                            <span className={changePct >= 0 ? "text-emerald-700" : "text-rose-700"}>
-                              {changePct >= 0 ? "+" : ""}{changePct}%
+                            <span
+                              className={
+                                changePct >= 0
+                                  ? "text-emerald-700"
+                                  : "text-rose-700"
+                              }
+                            >
+                              {changePct >= 0 ? "+" : ""}
+                              {changePct}%
                             </span>
                           ) : (
                             "—"
@@ -474,8 +515,12 @@ function WatchlistsPage() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={4} className="p-8 text-center text-xs text-[#52525B] italic font-semibold">
-                      No stocks added to this watchlist yet. Click "Add Stock Symbol" above.
+                    <td
+                      colSpan={4}
+                      className="p-8 text-center text-xs text-[#52525B] italic font-semibold"
+                    >
+                      No stocks added to this watchlist yet. Click "Add Stock
+                      Symbol" above.
                     </td>
                   </tr>
                 )}

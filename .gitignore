@@ -24,6 +24,10 @@ brain/
 artifacts/
 skills/
 configs/
+.omo/
+.claude/
+.codegraph/
+
 
 # Editor & OS files
 .vscode/

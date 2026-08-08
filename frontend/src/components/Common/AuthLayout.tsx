@@ -1,7 +1,6 @@
+import { Bot, CheckCircle2, TrendingUp } from "lucide-react"
 import { Logo } from "@/components/Common/Logo"
 import { Footer } from "./Footer"
-import { Bot, CheckCircle2, TrendingUp } from "lucide-react"
-
 
 interface AuthLayoutProps {
   children: React.ReactNode
@@ -17,7 +16,8 @@ export function AuthLayout({ children }: AuthLayoutProps) {
 
           <div className="pt-8 space-y-4">
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-200 border-1.5 border-[#27272A] rounded font-bold text-xs shadow-[2px_2px_0px_#27272A]">
-              <TrendingUp className="h-3.5 w-3.5" /> Indian Equities CFA Intelligence
+              <TrendingUp className="h-3.5 w-3.5" /> Indian Equities CFA
+              Intelligence
             </div>
 
             <h2 className="text-3xl font-display font-extrabold text-[#27272A] leading-tight">
@@ -25,7 +25,8 @@ export function AuthLayout({ children }: AuthLayoutProps) {
             </h2>
 
             <p className="text-sm text-[#52525B] leading-relaxed max-w-md">
-              Access technical indicators, corporate statement breakdowns, and Hierarchical Risk Parity portfolio optimizations in seconds.
+              Access technical indicators, corporate statement breakdowns, and
+              Hierarchical Risk Parity portfolio optimizations in seconds.
             </p>
           </div>
 
@@ -36,7 +37,9 @@ export function AuthLayout({ children }: AuthLayoutProps) {
             </div>
             <div className="flex items-center gap-2.5 text-xs font-bold text-[#27272A]">
               <CheckCircle2 className="h-4 w-4 text-[#2563EB]" />
-              <span>Hierarchical Risk Parity (HRP) covariance optimization</span>
+              <span>
+                Hierarchical Risk Parity (HRP) covariance optimization
+              </span>
             </div>
             <div className="flex items-center gap-2.5 text-xs font-bold text-[#27272A]">
               <CheckCircle2 className="h-4 w-4 text-[#2563EB]" />

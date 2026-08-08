@@ -3,7 +3,211 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { AgentGetQuotaStatusResponse, AgentListConversationsResponse, AgentListConversationMessagesData, AgentListConversationMessagesResponse, AgentUpdateConversationTitleData, AgentUpdateConversationTitleResponse, AgentDeleteConversationData, AgentDeleteConversationResponse, AgentBranchConversationData, AgentBranchConversationResponse, AgentChatStreamData, AgentChatStreamResponse, AgentOptionsChatStreamResponse, AgentResearchStreamData, AgentResearchStreamResponse, AgentOptionsResearchStreamResponse, ServeSpaData, ServeSpaResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PortfoliosListPortfoliosResponse, PortfoliosAddPortfolioItemData, PortfoliosAddPortfolioItemResponse, PortfoliosDeletePortfolioItemData, PortfoliosDeletePortfolioItemResponse, PortfoliosUpdatePortfolioItemData, PortfoliosUpdatePortfolioItemResponse, PortfoliosGetPortfolioMetricsData, PortfoliosGetPortfolioMetricsResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse, UtilsSearchStocksData, UtilsSearchStocksResponse, UtilsGetStockQuotesData, UtilsGetStockQuotesResponse, WatchlistsListWatchlistsResponse, WatchlistsCreateWatchlistData, WatchlistsCreateWatchlistResponse, WatchlistsDeleteWatchlistData, WatchlistsDeleteWatchlistResponse, WatchlistsAddWatchlistItemData, WatchlistsAddWatchlistItemResponse, WatchlistsDeleteWatchlistItemData, WatchlistsDeleteWatchlistItemResponse } from './types.gen';
+
+export class AgentService {
+    /**
+     * Get Quota Status
+     * @returns QuotaStatusPublic Successful Response
+     * @throws ApiError
+     */
+    public static getQuotaStatus(): CancelablePromise<AgentGetQuotaStatusResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/agent/quota'
+        });
+    }
+    
+    /**
+     * List Conversations
+     * @returns ConversationPublic Successful Response
+     * @throws ApiError
+     */
+    public static listConversations(): CancelablePromise<AgentListConversationsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/agent/conversations'
+        });
+    }
+    
+    /**
+     * List Conversation Messages
+     * @param data The data for the request.
+     * @param data.conversationId
+     * @returns ChatMessagePublic Successful Response
+     * @throws ApiError
+     */
+    public static listConversationMessages(data: AgentListConversationMessagesData): CancelablePromise<AgentListConversationMessagesResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/agent/conversations/{conversation_id}/messages',
+            path: {
+                conversation_id: data.conversationId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Update Conversation Title
+     * @param data The data for the request.
+     * @param data.conversationId
+     * @param data.requestBody
+     * @returns ConversationPublic Successful Response
+     * @throws ApiError
+     */
+    public static updateConversationTitle(data: AgentUpdateConversationTitleData): CancelablePromise<AgentUpdateConversationTitleResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/agent/conversations/{conversation_id}',
+            path: {
+                conversation_id: data.conversationId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Delete Conversation
+     * @param data The data for the request.
+     * @param data.conversationId
+     * @returns unknown Successful Response
+     * @throws ApiError
+     */
+    public static deleteConversation(data: AgentDeleteConversationData): CancelablePromise<AgentDeleteConversationResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/agent/conversations/{conversation_id}',
+            path: {
+                conversation_id: data.conversationId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Branch Conversation
+     * @param data The data for the request.
+     * @param data.conversationId
+     * @param data.requestBody
+     * @returns unknown Successful Response
+     * @throws ApiError
+     */
+    public static branchConversation(data: AgentBranchConversationData): CancelablePromise<AgentBranchConversationResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/agent/conversations/{conversation_id}/branch',
+            path: {
+                conversation_id: data.conversationId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Chat Stream
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns unknown Successful Response
+     * @throws ApiError
+     */
+    public static chatStream(data: AgentChatStreamData): CancelablePromise<AgentChatStreamResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/agent/chat/stream',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Options Chat Stream
+     * @returns unknown Successful Response
+     * @throws ApiError
+     */
+    public static optionsChatStream(): CancelablePromise<AgentOptionsChatStreamResponse> {
+        return __request(OpenAPI, {
+            method: 'OPTIONS',
+            url: '/api/v1/agent/chat/stream'
+        });
+    }
+    
+    /**
+     * Research Stream
+     * Research mode endpoint: runs 4 analyst personas in sequence, then synthesizes.
+     *
+     * Yields SSE events:
+     * - research_stage_update: analyst stage change (short_term, long_term, high_risk, low_risk, synthesize)
+     * - text_chunk: final synthesis text streaming
+     * - is_finished: completion marker
+     *
+     * Returns StreamingResponse with text/event-stream media type.
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns unknown Successful Response
+     * @throws ApiError
+     */
+    public static researchStream(data: AgentResearchStreamData): CancelablePromise<AgentResearchStreamResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/agent/research/stream',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Options Research Stream
+     * @returns unknown Successful Response
+     * @throws ApiError
+     */
+    public static optionsResearchStream(): CancelablePromise<AgentOptionsResearchStreamResponse> {
+        return __request(OpenAPI, {
+            method: 'OPTIONS',
+            url: '/api/v1/agent/research/stream'
+        });
+    }
+}
+
+export class DefaultService {
+    /**
+     * Serve Spa
+     * @param data The data for the request.
+     * @param data.fullPath
+     * @returns unknown Successful Response
+     * @throws ApiError
+     */
+    public static serveSpa(data: ServeSpaData): CancelablePromise<ServeSpaResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/{full_path}',
+            path: {
+                full_path: data.fullPath
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
 
 export class ItemsService {
     /**
@@ -205,6 +409,110 @@ export class LoginService {
             url: '/api/v1/password-recovery-html-content/{email}',
             path: {
                 email: data.email
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
+
+export class PortfoliosService {
+    /**
+     * List Portfolios
+     * @returns PortfolioPublic Successful Response
+     * @throws ApiError
+     */
+    public static listPortfolios(): CancelablePromise<PortfoliosListPortfoliosResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/portfolios'
+        });
+    }
+    
+    /**
+     * Add Portfolio Item
+     * @param data The data for the request.
+     * @param data.portfolioId
+     * @param data.requestBody
+     * @returns PortfolioItemPublic Successful Response
+     * @throws ApiError
+     */
+    public static addPortfolioItem(data: PortfoliosAddPortfolioItemData): CancelablePromise<PortfoliosAddPortfolioItemResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/portfolios/{portfolio_id}/items',
+            path: {
+                portfolio_id: data.portfolioId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Delete Portfolio Item
+     * @param data The data for the request.
+     * @param data.portfolioId
+     * @param data.itemId
+     * @returns unknown Successful Response
+     * @throws ApiError
+     */
+    public static deletePortfolioItem(data: PortfoliosDeletePortfolioItemData): CancelablePromise<PortfoliosDeletePortfolioItemResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/portfolios/{portfolio_id}/items/{item_id}',
+            path: {
+                portfolio_id: data.portfolioId,
+                item_id: data.itemId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Update Portfolio Item
+     * @param data The data for the request.
+     * @param data.portfolioId
+     * @param data.itemId
+     * @param data.requestBody
+     * @returns PortfolioItemPublic Successful Response
+     * @throws ApiError
+     */
+    public static updatePortfolioItem(data: PortfoliosUpdatePortfolioItemData): CancelablePromise<PortfoliosUpdatePortfolioItemResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/portfolios/{portfolio_id}/items/{item_id}',
+            path: {
+                portfolio_id: data.portfolioId,
+                item_id: data.itemId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Portfolio Metrics
+     * @param data The data for the request.
+     * @param data.portfolioId
+     * @returns PortfolioMetricsPublic Successful Response
+     * @throws ApiError
+     */
+    public static getPortfolioMetrics(data: PortfoliosGetPortfolioMetricsData): CancelablePromise<PortfoliosGetPortfolioMetricsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/portfolios/{portfolio_id}/metrics',
+            path: {
+                portfolio_id: data.portfolioId
             },
             errors: {
                 422: 'Validation Error'
@@ -463,6 +771,146 @@ export class UtilsService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/utils/health-check/'
+        });
+    }
+    
+    /**
+     * Search Stocks
+     * Query yfinance.Search API live per official yfinance reference.
+     * Filtered exclusively for Indian Equities (NSE/BSE) and Indian Indices.
+     * @param data The data for the request.
+     * @param data.q
+     * @returns unknown Successful Response
+     * @throws ApiError
+     */
+    public static searchStocks(data: UtilsSearchStocksData): CancelablePromise<UtilsSearchStocksResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/utils/stock-search',
+            query: {
+                q: data.q
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Stock Quotes
+     * Batch fetch real-time LTP (Latest Traded Price), 1D % Change, and Full Company Name for stock symbols.
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns unknown Successful Response
+     * @throws ApiError
+     */
+    public static getStockQuotes(data: UtilsGetStockQuotesData): CancelablePromise<UtilsGetStockQuotesResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/utils/stock-quotes',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
+
+export class WatchlistsService {
+    /**
+     * List Watchlists
+     * @returns WatchlistPublic Successful Response
+     * @throws ApiError
+     */
+    public static listWatchlists(): CancelablePromise<WatchlistsListWatchlistsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/watchlists'
+        });
+    }
+    
+    /**
+     * Create Watchlist
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns WatchlistPublic Successful Response
+     * @throws ApiError
+     */
+    public static createWatchlist(data: WatchlistsCreateWatchlistData): CancelablePromise<WatchlistsCreateWatchlistResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/watchlists',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Delete Watchlist
+     * @param data The data for the request.
+     * @param data.watchlistId
+     * @returns unknown Successful Response
+     * @throws ApiError
+     */
+    public static deleteWatchlist(data: WatchlistsDeleteWatchlistData): CancelablePromise<WatchlistsDeleteWatchlistResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/watchlists/{watchlist_id}',
+            path: {
+                watchlist_id: data.watchlistId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Add Watchlist Item
+     * @param data The data for the request.
+     * @param data.watchlistId
+     * @param data.requestBody
+     * @returns WatchlistItemPublic Successful Response
+     * @throws ApiError
+     */
+    public static addWatchlistItem(data: WatchlistsAddWatchlistItemData): CancelablePromise<WatchlistsAddWatchlistItemResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/watchlists/{watchlist_id}/items',
+            path: {
+                watchlist_id: data.watchlistId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Delete Watchlist Item
+     * @param data The data for the request.
+     * @param data.watchlistId
+     * @param data.itemId
+     * @returns unknown Successful Response
+     * @throws ApiError
+     */
+    public static deleteWatchlistItem(data: WatchlistsDeleteWatchlistItemData): CancelablePromise<WatchlistsDeleteWatchlistItemResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/watchlists/{watchlist_id}/items/{item_id}',
+            path: {
+                watchlist_id: data.watchlistId,
+                item_id: data.itemId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
         });
     }
 }

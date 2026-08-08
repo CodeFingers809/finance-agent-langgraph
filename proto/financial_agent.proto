@@ -30,6 +30,16 @@ message HRPOptimizationResult {
   string summary_notes = 3;
 }
 
+message ResearchStageUpdate {
+  string stage = 1;
+  string status = 2;
+}
+
+message ResearchReportFinal {
+  string markdown = 1;
+  string created_at = 2;
+}
+
 message StreamEvent {
   string event_id = 1;
   string timestamp = 2;
@@ -40,5 +50,7 @@ message StreamEvent {
     HRPOptimizationResult hrp_result = 6;
     string error_message = 7;
     bool is_finished = 8;
+    ResearchStageUpdate research_stage_update = 9;
+    ResearchReportFinal research_report_final = 10;
   }
 }

@@ -1,8 +1,6 @@
 import { Link as RouterLink } from "@tanstack/react-router"
 import { ChevronsUpDown, LogOut, Settings } from "lucide-react"
 
-
-
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -34,7 +32,9 @@ function UserInfo({ fullName, email }: UserInfoProps) {
         </AvatarFallback>
       </Avatar>
       <div className="flex flex-col items-start min-w-0">
-        <p className="text-xs font-bold text-[#27272A] truncate w-full">{fullName || "User Account"}</p>
+        <p className="text-xs font-bold text-[#27272A] truncate w-full">
+          {fullName || "User Account"}
+        </p>
         <p className="text-[11px] text-[#52525B] truncate w-full">{email}</p>
       </div>
     </div>
@@ -85,7 +85,10 @@ export function User({ user }: { user: any }) {
               </DropdownMenuItem>
             </RouterLink>
             <DropdownMenuSeparator className="bg-[#27272A]" />
-            <DropdownMenuItem onClick={handleLogout} className="gap-2 font-bold text-xs text-rose-600 hover:bg-rose-100 cursor-pointer rounded p-2">
+            <DropdownMenuItem
+              onClick={handleLogout}
+              className="gap-2 font-bold text-xs text-rose-600 hover:bg-rose-100 cursor-pointer rounded p-2"
+            >
               <LogOut className="h-4 w-4" />
               <span>Log Out</span>
             </DropdownMenuItem>

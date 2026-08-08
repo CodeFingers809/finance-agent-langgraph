@@ -1,6 +1,5 @@
 import protobuf from "protobufjs/light"
 
-
 const protoSchemaJSON = {
   nested: {
     financial_agent: {
@@ -83,4 +82,3 @@ export function decodeProtobufEvent(base64Data: string): ParsedStreamEvent {
     return { errorMessage: "Protobuf decode error" }
   }
 }
-

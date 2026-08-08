@@ -9,6 +9,36 @@ export type Body_login_login_access_token = {
     client_secret?: (string | null);
 };
 
+export type BranchConversationPayload = {
+    until_message_id?: (string | null);
+};
+
+export type ChatMessagePublic = {
+    id: string;
+    conversation_id: string;
+    sender: string;
+    content: string;
+    metadata_json: (string | null);
+    created_at: (string | null);
+};
+
+export type ChatRequestPayload = {
+    conversation_id?: (string | null);
+    message: string;
+    model_name?: string;
+};
+
+export type ConversationPublic = {
+    id: string;
+    title: string;
+    created_at: (string | null);
+    updated_at: (string | null);
+};
+
+export type ConversationUpdatePayload = {
+    title: string;
+};
+
 export type HTTPValidationError = {
     detail?: Array<ValidationError>;
 };
@@ -45,11 +75,72 @@ export type NewPassword = {
     new_password: string;
 };
 
+export type PortfolioItemCreate = {
+    symbol: string;
+    quantity: number;
+    buy_price: number;
+    avg_price?: (number | null);
+    bought_at?: (string | null);
+};
+
+export type PortfolioItemPublic = {
+    id: string;
+    portfolio_id: string;
+    symbol: string;
+    quantity: number;
+    buy_price: number;
+    avg_price: number;
+    bought_at: (string | null);
+    created_at: (string | null);
+};
+
+export type PortfolioMetricsPublic = {
+    total_invested: number;
+    current_value: number;
+    total_return: number;
+    total_return_pct: number;
+    cagr: (number | null);
+    sharpe_ratio: (number | null);
+    sortino_ratio: (number | null);
+    beta: (number | null);
+    alpha: (number | null);
+};
+
+export type PortfolioPublic = {
+    id: string;
+    name: string;
+    created_at: (string | null);
+    items?: Array<PortfolioItemPublic>;
+};
+
 export type PrivateUserCreate = {
     email: string;
     password: string;
     full_name: string;
     is_verified?: boolean;
+};
+
+export type QuotaStatusPublic = {
+    standard_count?: number;
+    standard_remaining_today: number;
+    standard_limit_today?: number;
+    upgraded_count?: number;
+    upgraded_remaining_today: number;
+    upgraded_limit_today?: number;
+    seconds_until_next_allowed?: number;
+    is_limited?: boolean;
+};
+
+/**
+ * Request payload for research mode (4-analyst synthesis).
+ */
+export type ResearchRequestPayload = {
+    query: string;
+    model_name?: string;
+};
+
+export type StockQuoteRequest = {
+    symbols: Array<(string)>;
 };
 
 export type Token = {
@@ -113,6 +204,80 @@ export type ValidationError = {
     };
 };
 
+export type WatchlistCreate = {
+    name: string;
+};
+
+export type WatchlistItemCreate = {
+    symbol: string;
+};
+
+export type WatchlistItemPublic = {
+    id: string;
+    watchlist_id: string;
+    symbol: string;
+    added_at: (string | null);
+};
+
+export type WatchlistPublic = {
+    id: string;
+    name: string;
+    created_at: (string | null);
+    items?: Array<WatchlistItemPublic>;
+};
+
+export type AgentGetQuotaStatusResponse = (QuotaStatusPublic);
+
+export type AgentListConversationsResponse = (Array<ConversationPublic>);
+
+export type AgentListConversationMessagesData = {
+    conversationId: string;
+};
+
+export type AgentListConversationMessagesResponse = (Array<ChatMessagePublic>);
+
+export type AgentUpdateConversationTitleData = {
+    conversationId: string;
+    requestBody: ConversationUpdatePayload;
+};
+
+export type AgentUpdateConversationTitleResponse = (ConversationPublic);
+
+export type AgentDeleteConversationData = {
+    conversationId: string;
+};
+
+export type AgentDeleteConversationResponse = (unknown);
+
+export type AgentBranchConversationData = {
+    conversationId: string;
+    requestBody: BranchConversationPayload;
+};
+
+export type AgentBranchConversationResponse = (unknown);
+
+export type AgentChatStreamData = {
+    requestBody: ChatRequestPayload;
+};
+
+export type AgentChatStreamResponse = (unknown);
+
+export type AgentOptionsChatStreamResponse = (unknown);
+
+export type AgentResearchStreamData = {
+    requestBody: ResearchRequestPayload;
+};
+
+export type AgentResearchStreamResponse = (unknown);
+
+export type AgentOptionsResearchStreamResponse = (unknown);
+
+export type ServeSpaData = {
+    fullPath: string;
+};
+
+export type ServeSpaResponse = (unknown);
+
 export type ItemsReadItemsData = {
     limit?: number;
     skip?: number;
@@ -170,6 +335,36 @@ export type LoginRecoverPasswordHtmlContentData = {
 };
 
 export type LoginRecoverPasswordHtmlContentResponse = (string);
+
+export type PortfoliosListPortfoliosResponse = (Array<PortfolioPublic>);
+
+export type PortfoliosAddPortfolioItemData = {
+    portfolioId: string;
+    requestBody: PortfolioItemCreate;
+};
+
+export type PortfoliosAddPortfolioItemResponse = (PortfolioItemPublic);
+
+export type PortfoliosDeletePortfolioItemData = {
+    itemId: string;
+    portfolioId: string;
+};
+
+export type PortfoliosDeletePortfolioItemResponse = (unknown);
+
+export type PortfoliosUpdatePortfolioItemData = {
+    itemId: string;
+    portfolioId: string;
+    requestBody: PortfolioItemCreate;
+};
+
+export type PortfoliosUpdatePortfolioItemResponse = (PortfolioItemPublic);
+
+export type PortfoliosGetPortfolioMetricsData = {
+    portfolioId: string;
+};
+
+export type PortfoliosGetPortfolioMetricsResponse = (PortfolioMetricsPublic);
 
 export type PrivateCreateUserData = {
     requestBody: PrivateUserCreate;
@@ -238,3 +433,43 @@ export type UtilsTestEmailData = {
 export type UtilsTestEmailResponse = (Message);
 
 export type UtilsHealthCheckResponse = (boolean);
+
+export type UtilsSearchStocksData = {
+    q: string;
+};
+
+export type UtilsSearchStocksResponse = (unknown);
+
+export type UtilsGetStockQuotesData = {
+    requestBody: StockQuoteRequest;
+};
+
+export type UtilsGetStockQuotesResponse = (unknown);
+
+export type WatchlistsListWatchlistsResponse = (Array<WatchlistPublic>);
+
+export type WatchlistsCreateWatchlistData = {
+    requestBody: WatchlistCreate;
+};
+
+export type WatchlistsCreateWatchlistResponse = (WatchlistPublic);
+
+export type WatchlistsDeleteWatchlistData = {
+    watchlistId: string;
+};
+
+export type WatchlistsDeleteWatchlistResponse = (unknown);
+
+export type WatchlistsAddWatchlistItemData = {
+    requestBody: WatchlistItemCreate;
+    watchlistId: string;
+};
+
+export type WatchlistsAddWatchlistItemResponse = (WatchlistItemPublic);
+
+export type WatchlistsDeleteWatchlistItemData = {
+    itemId: string;
+    watchlistId: string;
+};
+
+export type WatchlistsDeleteWatchlistItemResponse = (unknown);

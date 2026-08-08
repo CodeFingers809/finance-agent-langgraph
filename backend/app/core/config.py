@@ -59,7 +59,12 @@ class Settings(BaseSettings):
 
     PROJECT_NAME: str = "Finance Agent"
     GEMINI_API_KEY: str = ""
+    OPENAI_API_KEY: str = ""
 
+    LANGSMITH_API_KEY: str = ""
+    LANGSMITH_PROJECT: str = ""
+    LANGSMITH_ENDPOINT: str = "https://aws.api.smith.langchain.com"
+    LANGCHAIN_TRACING_V2: str = "false"
 
     SENTRY_DSN: HttpUrl | None = None
     DATABASE_URL: str | None = None

@@ -61,9 +61,16 @@ The system features real-time Server-Sent Events (SSE) streaming, persistent too
 
 ### Security, Rate Limiting & Auth
 - **JWT Authentication**: Password hashing using Argon2id (`passlib` + `argon2-cffi`) and OAuth2 bearer tokens.
-- **Rate Limiting**: IP and endpoint rate limits enforced via `SlowAPI`. Dual-tier daily model quotas (10 requests/day for standard tier, 999/day for superusers).
+- **Rate Limiting**: IP and endpoint rate limits enforced via `SlowAPI`. Dual-tier daily model quotas (10 requests/day for standard tier, 999/day for superusers). Research Mode uses strict 1 report/day per user cap (independent of chat quotas).
 - **Security Headers Middleware**: Enforces `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection`, `Referrer-Policy`, and `Content-Security-Policy`.
 - **Parameterized SQL**: All database operations use `SQLModel` / `SQLAlchemy` ORM parameterization, eliminating SQL injection vectors.
+
+### Research Mode (Multi-Analyst Hedge Fund Architecture)
+- **Exclusive to GPT-5.6 Luna**: Granular LangGraph StateGraph with 4 specialist analyst personas (short-term technical, long-term fundamental, high-risk/volatility, low-risk/defensive).
+- **Strict Daily Quota**: 1 research report per user per day (independent of standard/upgraded chat quotas).
+- **Multi-Tool Analysis**: Each analyst runs financial tools in parallel (price metrics, technicals, fundamentals, web search) to inform specialized perspective.
+- **Structured Output**: Final synthesis as detailed markdown report with labeled analyst perspectives, key risk/opportunity highlights, and actionable recommendation with conviction level.
+- **Sequential Execution**: 4 analyst nodes run sequentially (~30s each), aggregator synthesizes final report (~15s). Parallelizable via `asyncio.gather()` for future optimization.
 
 ### Production Storage & Persistence
 - **SQLite WAL Mode**: SQLite embedded database using Write-Ahead Logging for non-blocking concurrent reads.
@@ -76,7 +83,11 @@ The system features real-time Server-Sent Events (SSE) streaming, persistent too
 ### Backend
 - **Framework**: Python 3.14, FastAPI, Pydantic v2
 - **Agent Orchestration**: LangGraph, LangChain Core
-- **AI Models**: Google Gemini 2.5 Flash / Pro (`google-genai`)
+- **LLM Providers**: Google Gemini 2.5 Flash / Pro (`google-genai`), OpenAI GPT-5.6 Luna (`langchain-openai`)
+- **Document Parsing**: LLama-Index Core + Web Readers (`llama-index-core`, `llama-index-readers-web`)
+- **Web Search**: DuckDuckGo wrapper (`duckduckgo-search`) - unofficial, zero-cost, unofficial risk
+- **Observability**: LangSmith tracing + evaluation (`langsmith`)
+- **Scientific Computing**: SymPy for symbolic math (`sympy`)
 - **Database & ORM**: SQLModel (SQLAlchemy) over SQLite
 - **Financial Data & Math**: `yfinance`, `pandas`, `numpy`, `scipy`
 - **Security & Rate Limiting**: Argon2id, PyJWT, SlowAPI
@@ -98,7 +109,8 @@ The system features real-time Server-Sent Events (SSE) streaming, persistent too
 ### Prerequisites
 - **Python**: 3.11+ (managed via `uv` or `venv`)
 - **Node.js**: v18+ and `bun` / `npm`
-- **Gemini API Key**: Obtainable from Google AI Studio
+- **Gemini API Key** (standard chat): Obtainable from [Google AI Studio](https://aistudio.google.com)
+- **OpenAI API Key** (research mode): Obtainable from [OpenAI Platform](https://platform.openai.com/account/api-keys) (optional, required only for Research Mode with GPT-5.6 Luna)
 
 ---
 

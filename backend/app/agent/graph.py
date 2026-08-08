@@ -4,6 +4,7 @@ from typing import AsyncGenerator
 
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 
 
@@ -35,24 +36,42 @@ Key Instructions:
 
 
 def get_agent_executor(model_name: str = "gemini-3.5-flash-lite"):
-    api_key = settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        api_key = "demo_placeholder_key"
-
+    """
+    Route to appropriate LLM provider based on model_name.
+    Supports Gemini (google-genai) and OpenAI (langchain-openai).
+    Returns agent executor (LangGraph ReAct agent).
+    """
     lower = model_name.lower()
-    if "pro" in lower:
-        mapped_model = "gemini-2.5-pro"
-    elif "lite" in lower or "standard" in lower:
-        mapped_model = "gemini-3.5-flash-lite"
-    else:
-        mapped_model = "gemini-3.5-flash"
 
-    llm = ChatGoogleGenerativeAI(
-        model=mapped_model,
-        google_api_key=api_key,
-        temperature=0.2,
-        streaming=True,
-    )
+    if "gpt-5.6-luna" in lower or "gpt-5" in lower or "openai" in lower:
+        api_key = settings.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            api_key = "demo_placeholder_key"
+        
+        llm = ChatOpenAI(
+            model="gpt-5.6-luna",
+            api_key=api_key,
+            temperature=0.2,
+            streaming=True,
+        )
+    else:
+        api_key = settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            api_key = "demo_placeholder_key"
+
+        if "pro" in lower:
+            mapped_model = "gemini-2.5-pro"
+        elif "lite" in lower or "standard" in lower:
+            mapped_model = "gemini-3.5-flash-lite"
+        else:
+            mapped_model = "gemini-3.5-flash"
+
+        llm = ChatGoogleGenerativeAI(
+            model=mapped_model,
+            google_api_key=api_key,
+            temperature=0.2,
+            streaming=True,
+        )
 
     agent = create_react_agent(
         model=llm,

@@ -70,6 +70,45 @@ def check_and_update_quota(session: Session, user_id: uuid.UUID, model_name: str
     return quota
 
 
+def check_research_mode_quota(session: Session, user_id: uuid.UUID) -> None:
+    """
+    Enforces strict 1 research report per user per day (independent of chat quotas).
+    Research mode is exclusive to gpt-5.6-luna.
+    Raises HTTPException(429) if daily limit exceeded.
+    """
+    user = session.get(User, user_id)
+    if user and user.is_superuser:
+        return
+
+    today_str = datetime.now(UTC).strftime("%Y-%m-%d")
+
+    quota = session.exec(select(UserQuota).where(UserQuota.user_id == user_id)).first()
+    if not quota:
+        quota = UserQuota(
+            user_id=user_id,
+            last_request_at=None,
+            daily_standard_count=0,
+            daily_upgraded_count=0,
+            last_reset_date=today_str,
+            last_research_request_date=None,
+        )
+        session.add(quota)
+        session.commit()
+        session.refresh(quota)
+        return
+
+    if quota.last_research_request_date == today_str:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Research mode limited to 1 report per day (resets at UTC midnight).",
+        )
+
+    quota.last_research_request_date = today_str
+    session.add(quota)
+    session.commit()
+    session.refresh(quota)
+
+
 def get_user_quota_status(session: Session, user_id: uuid.UUID) -> dict[str, int]:
     user = session.get(User, user_id)
     if user and user.is_superuser:
@@ -80,6 +119,9 @@ def get_user_quota_status(session: Session, user_id: uuid.UUID) -> dict[str, int
             "upgraded_count": 0,
             "upgraded_remaining_today": 999,
             "upgraded_limit_today": 999,
+            "research_count": 0,
+            "research_remaining_today": 999,
+            "research_limit_today": 999,
             "seconds_until_next_allowed": 0,
             "is_limited": False,
         }
@@ -95,12 +137,16 @@ def get_user_quota_status(session: Session, user_id: uuid.UUID) -> dict[str, int
             "upgraded_count": 0,
             "upgraded_remaining_today": 3,
             "upgraded_limit_today": 3,
+            "research_count": 0,
+            "research_remaining_today": 1,
+            "research_limit_today": 1,
             "seconds_until_next_allowed": 0,
             "is_limited": False,
         }
 
     standard_count = quota.daily_standard_count if quota.last_reset_date == today_str else 0
     upgraded_count = quota.daily_upgraded_count if quota.last_reset_date == today_str else 0
+    research_count = 1 if quota.last_research_request_date == today_str else 0
 
     return {
         "standard_count": standard_count,
@@ -109,6 +155,9 @@ def get_user_quota_status(session: Session, user_id: uuid.UUID) -> dict[str, int
         "upgraded_count": upgraded_count,
         "upgraded_remaining_today": max(0, 3 - upgraded_count),
         "upgraded_limit_today": 3,
+        "research_count": research_count,
+        "research_remaining_today": max(0, 1 - research_count),
+        "research_limit_today": 1,
         "seconds_until_next_allowed": 0,
         "is_limited": standard_count >= 10,
     }

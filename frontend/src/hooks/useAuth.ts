@@ -53,7 +53,6 @@ const useAuth = () => {
     onError: handleError.bind(showErrorToast),
   })
 
-
   const logout = () => {
     localStorage.removeItem("access_token")
     navigate({ to: "/login" })

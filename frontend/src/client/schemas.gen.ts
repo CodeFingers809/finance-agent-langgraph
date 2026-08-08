@@ -57,6 +57,154 @@ export const Body_login_login_access_tokenSchema = {
     title: 'Body_login-login_access_token'
 } as const;
 
+export const BranchConversationPayloadSchema = {
+    properties: {
+        until_message_id: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Until Message Id'
+        }
+    },
+    type: 'object',
+    title: 'BranchConversationPayload'
+} as const;
+
+export const ChatMessagePublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        conversation_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Conversation Id'
+        },
+        sender: {
+            type: 'string',
+            title: 'Sender'
+        },
+        content: {
+            type: 'string',
+            title: 'Content'
+        },
+        metadata_json: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Metadata Json'
+        },
+        created_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Created At'
+        }
+    },
+    type: 'object',
+    required: ['id', 'conversation_id', 'sender', 'content', 'metadata_json', 'created_at'],
+    title: 'ChatMessagePublic'
+} as const;
+
+export const ChatRequestPayloadSchema = {
+    properties: {
+        conversation_id: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Conversation Id'
+        },
+        message: {
+            type: 'string',
+            title: 'Message'
+        },
+        model_name: {
+            type: 'string',
+            title: 'Model Name',
+            default: 'gemini-2.0-flash-lite'
+        }
+    },
+    type: 'object',
+    required: ['message'],
+    title: 'ChatRequestPayload'
+} as const;
+
+export const ConversationPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        title: {
+            type: 'string',
+            title: 'Title'
+        },
+        created_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Created At'
+        },
+        updated_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Updated At'
+        }
+    },
+    type: 'object',
+    required: ['id', 'title', 'created_at', 'updated_at'],
+    title: 'ConversationPublic'
+} as const;
+
+export const ConversationUpdatePayloadSchema = {
+    properties: {
+        title: {
+            type: 'string',
+            title: 'Title'
+        }
+    },
+    type: 'object',
+    required: ['title'],
+    title: 'ConversationUpdatePayload'
+} as const;
+
 export const HTTPValidationErrorSchema = {
     properties: {
         detail: {
@@ -226,6 +374,226 @@ export const NewPasswordSchema = {
     title: 'NewPassword'
 } as const;
 
+export const PortfolioItemCreateSchema = {
+    properties: {
+        symbol: {
+            type: 'string',
+            maxLength: 50,
+            minLength: 1,
+            title: 'Symbol'
+        },
+        quantity: {
+            type: 'number',
+            exclusiveMinimum: 0,
+            title: 'Quantity'
+        },
+        buy_price: {
+            type: 'number',
+            exclusiveMinimum: 0,
+            title: 'Buy Price'
+        },
+        avg_price: {
+            anyOf: [
+                {
+                    type: 'number'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Avg Price'
+        },
+        bought_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 50
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Bought At'
+        }
+    },
+    type: 'object',
+    required: ['symbol', 'quantity', 'buy_price'],
+    title: 'PortfolioItemCreate'
+} as const;
+
+export const PortfolioItemPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        portfolio_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Portfolio Id'
+        },
+        symbol: {
+            type: 'string',
+            title: 'Symbol'
+        },
+        quantity: {
+            type: 'number',
+            title: 'Quantity'
+        },
+        buy_price: {
+            type: 'number',
+            title: 'Buy Price'
+        },
+        avg_price: {
+            type: 'number',
+            title: 'Avg Price'
+        },
+        bought_at: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Bought At'
+        },
+        created_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Created At'
+        }
+    },
+    type: 'object',
+    required: ['id', 'portfolio_id', 'symbol', 'quantity', 'buy_price', 'avg_price', 'bought_at', 'created_at'],
+    title: 'PortfolioItemPublic'
+} as const;
+
+export const PortfolioMetricsPublicSchema = {
+    properties: {
+        total_invested: {
+            type: 'number',
+            title: 'Total Invested'
+        },
+        current_value: {
+            type: 'number',
+            title: 'Current Value'
+        },
+        total_return: {
+            type: 'number',
+            title: 'Total Return'
+        },
+        total_return_pct: {
+            type: 'number',
+            title: 'Total Return Pct'
+        },
+        cagr: {
+            anyOf: [
+                {
+                    type: 'number'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Cagr'
+        },
+        sharpe_ratio: {
+            anyOf: [
+                {
+                    type: 'number'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Sharpe Ratio'
+        },
+        sortino_ratio: {
+            anyOf: [
+                {
+                    type: 'number'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Sortino Ratio'
+        },
+        beta: {
+            anyOf: [
+                {
+                    type: 'number'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Beta'
+        },
+        alpha: {
+            anyOf: [
+                {
+                    type: 'number'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Alpha'
+        }
+    },
+    type: 'object',
+    required: ['total_invested', 'current_value', 'total_return', 'total_return_pct', 'cagr', 'sharpe_ratio', 'sortino_ratio', 'beta', 'alpha'],
+    title: 'PortfolioMetricsPublic'
+} as const;
+
+export const PortfolioPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        name: {
+            type: 'string',
+            title: 'Name'
+        },
+        created_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Created At'
+        },
+        items: {
+            items: {
+                '$ref': '#/components/schemas/PortfolioItemPublic'
+            },
+            type: 'array',
+            title: 'Items',
+            default: []
+        }
+    },
+    type: 'object',
+    required: ['id', 'name', 'created_at'],
+    title: 'PortfolioPublic'
+} as const;
+
 export const PrivateUserCreateSchema = {
     properties: {
         email: {
@@ -249,6 +617,85 @@ export const PrivateUserCreateSchema = {
     type: 'object',
     required: ['email', 'password', 'full_name'],
     title: 'PrivateUserCreate'
+} as const;
+
+export const QuotaStatusPublicSchema = {
+    properties: {
+        standard_count: {
+            type: 'integer',
+            title: 'Standard Count',
+            default: 0
+        },
+        standard_remaining_today: {
+            type: 'integer',
+            title: 'Standard Remaining Today'
+        },
+        standard_limit_today: {
+            type: 'integer',
+            title: 'Standard Limit Today',
+            default: 10
+        },
+        upgraded_count: {
+            type: 'integer',
+            title: 'Upgraded Count',
+            default: 0
+        },
+        upgraded_remaining_today: {
+            type: 'integer',
+            title: 'Upgraded Remaining Today'
+        },
+        upgraded_limit_today: {
+            type: 'integer',
+            title: 'Upgraded Limit Today',
+            default: 3
+        },
+        seconds_until_next_allowed: {
+            type: 'integer',
+            title: 'Seconds Until Next Allowed',
+            default: 0
+        },
+        is_limited: {
+            type: 'boolean',
+            title: 'Is Limited',
+            default: false
+        }
+    },
+    type: 'object',
+    required: ['standard_remaining_today', 'upgraded_remaining_today'],
+    title: 'QuotaStatusPublic'
+} as const;
+
+export const ResearchRequestPayloadSchema = {
+    properties: {
+        query: {
+            type: 'string',
+            title: 'Query'
+        },
+        model_name: {
+            type: 'string',
+            title: 'Model Name',
+            default: 'gpt-5.6-luna'
+        }
+    },
+    type: 'object',
+    required: ['query'],
+    title: 'ResearchRequestPayload',
+    description: 'Request payload for research mode (4-analyst synthesis).'
+} as const;
+
+export const StockQuoteRequestSchema = {
+    properties: {
+        symbols: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Symbols'
+        }
+    },
+    type: 'object',
+    required: ['symbols'],
+    title: 'StockQuoteRequest'
 } as const;
 
 export const TokenSchema = {
@@ -568,4 +1015,103 @@ export const ValidationErrorSchema = {
     type: 'object',
     required: ['loc', 'msg', 'type'],
     title: 'ValidationError'
+} as const;
+
+export const WatchlistCreateSchema = {
+    properties: {
+        name: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Name'
+        }
+    },
+    type: 'object',
+    required: ['name'],
+    title: 'WatchlistCreate'
+} as const;
+
+export const WatchlistItemCreateSchema = {
+    properties: {
+        symbol: {
+            type: 'string',
+            maxLength: 50,
+            minLength: 1,
+            title: 'Symbol'
+        }
+    },
+    type: 'object',
+    required: ['symbol'],
+    title: 'WatchlistItemCreate'
+} as const;
+
+export const WatchlistItemPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        watchlist_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Watchlist Id'
+        },
+        symbol: {
+            type: 'string',
+            title: 'Symbol'
+        },
+        added_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Added At'
+        }
+    },
+    type: 'object',
+    required: ['id', 'watchlist_id', 'symbol', 'added_at'],
+    title: 'WatchlistItemPublic'
+} as const;
+
+export const WatchlistPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        name: {
+            type: 'string',
+            title: 'Name'
+        },
+        created_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Created At'
+        },
+        items: {
+            items: {
+                '$ref': '#/components/schemas/WatchlistItemPublic'
+            },
+            type: 'array',
+            title: 'Items',
+            default: []
+        }
+    },
+    type: 'object',
+    required: ['id', 'name', 'created_at'],
+    title: 'WatchlistPublic'
 } as const;

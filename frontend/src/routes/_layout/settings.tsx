@@ -35,9 +35,12 @@ function UserSettings() {
   return (
     <div className="p-6 space-y-6 bg-[#FAF6F0] min-h-full text-[#27272A]">
       <div className="border-b-2 border-[#27272A] pb-4">
-        <h1 className="text-3xl font-display font-extrabold tracking-tight text-[#27272A]">User Settings</h1>
+        <h1 className="text-3xl font-display font-extrabold tracking-tight text-[#27272A]">
+          User Settings
+        </h1>
         <p className="text-xs text-[#52525B]">
-          Manage your account profile, authentication password, and security preferences.
+          Manage your account profile, authentication password, and security
+          preferences.
         </p>
       </div>
 
@@ -55,7 +58,11 @@ function UserSettings() {
         </TabsList>
 
         {finalTabs.map((tab) => (
-          <TabsContent key={tab.value} value={tab.value} className="bg-white border-2 border-[#27272A] shadow-[4px_4px_0px_#27272A] rounded-xl p-6">
+          <TabsContent
+            key={tab.value}
+            value={tab.value}
+            className="bg-white border-2 border-[#27272A] shadow-[4px_4px_0px_#27272A] rounded-xl p-6"
+          >
             <tab.component />
           </TabsContent>
         ))}

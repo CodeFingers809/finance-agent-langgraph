@@ -1,24 +1,33 @@
-import { useState, useEffect, useRef } from "react"
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router"
 import {
-  ArrowUp,
-  Square,
-  Bot,
-  User,
-  CheckCircle2,
-  BarChart3,
   AlertTriangle,
-  ChevronRight,
-  GitBranch,
-  Copy,
+  ArrowUp,
+  BarChart3,
+  Bot,
   Check,
+  CheckCircle2,
+  ChevronRight,
+  Copy,
+  GitBranch,
+  Square,
+  User,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useEffect, useRef, useState, useCallback } from "react"
+import { OpenAPI } from "@/client"
 import { CustomSpinner } from "@/components/Common/CustomSpinner"
 import { MarkdownRenderer } from "@/components/Common/MarkdownRenderer"
-import { OpenAPI } from "@/client"
-import { decodeProtobufEvent, ParsedStreamEvent } from "@/proto/financial_agent"
+import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  decodeProtobufEvent,
+  type ParsedStreamEvent,
+} from "@/proto/financial_agent"
 
 export const Route = createFileRoute("/_layout/chat")({
   component: ChatPage,
@@ -76,7 +85,9 @@ function formatFriendlyJson(raw: any): string {
       .toLowerCase()
     let valStr = ""
     if (Array.isArray(val)) {
-      valStr = val.map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v))).join(", ")
+      valStr = val
+        .map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v)))
+        .join(", ")
     } else if (typeof val === "object") {
       valStr = JSON.stringify(val)
     } else {
@@ -98,7 +109,7 @@ function renderFormattedText(rawText: string): string {
       if (matches.length > 0) {
         text = matches.map((m) => m[1]).join("")
       }
-    } catch (e) {
+    } catch (_e) {
       // Fallback
     }
   }
@@ -112,7 +123,9 @@ function ChatPage() {
   const search = useSearch({ from: "/_layout/chat" })
   const activeConvIdFromUrl = search?.convId
 
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(activeConvIdFromUrl || null)
+  const [activeConversationId, setActiveConversationId] = useState<
+    string | null
+  >(activeConvIdFromUrl || null)
   const [messages, setMessages] = useState<ChatMessageItem[]>([])
   const [inputMessage, setInputMessage] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
@@ -123,21 +136,82 @@ function ChatPage() {
   const [isTimelineOpen, setIsTimelineOpen] = useState(false)
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null)
   const [selectedModel, setSelectedModel] = useState<string>(() => {
-    return localStorage.getItem("selected_gemini_model") || "gemini-3.5-flash-lite"
+    return (
+      localStorage.getItem("selected_gemini_model") || "gemini-3.5-flash-lite"
+    )
   })
+  const [isResearchMode, setIsResearchMode] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const token = localStorage.getItem("access_token")
 
+  // Fetch quota status — only once on mount, then every 5 minutes (cached)
+  const fetchQuotaStatus = useCallback(async () => {
+    try {
+      const authToken = localStorage.getItem("access_token")
+      if (!authToken) return
+      const res = await fetch(`${OpenAPI.BASE}/api/v1/agent/quota`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.is_limited) {
+          setIsRateLimited(true)
+          setRateLimitError(
+            `Quota limit reached (${data.standard_count}/10 used today).`,
+          )
+        } else {
+          setIsRateLimited(false)
+          setRateLimitError(null)
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch quota", e)
+    }
+  }, []) // No dependencies — stable function, won't trigger useEffect unnecessarily
+
+  // Fetch messages for active conversation — only when convId changes
+  const fetchMessages = useCallback(async (convId: string) => {
+    try {
+      const authToken = localStorage.getItem("access_token")
+      if (!authToken) return
+      const res = await fetch(
+        `${OpenAPI.BASE}/api/v1/agent/conversations/${convId}/messages`,
+        {
+          headers: { Authorization: `Bearer ${authToken}` },
+        },
+      )
+      if (res.ok) {
+        const data = await res.json()
+        setMessages(
+          data.map((m: any) => ({
+            id: m.id,
+            sender: m.sender,
+            content: m.content,
+            metadata_json: m.metadata_json,
+            created_at: m.created_at,
+          })),
+        )
+      }
+    } catch (e) {
+      console.error("Failed to fetch messages", e)
+    }
+  }, []) // No dependencies — stable function
+
+  // Initialize scroll on mount
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, activeToolEvents, isTimelineOpen])
-
-  useEffect(() => {
-    fetchQuotaStatus()
   }, [])
 
+  // Fetch quota on mount only; refetch every 5 min (stop polling for efficiency)
+  useEffect(() => {
+    fetchQuotaStatus()
+    const quotaTimer = setInterval(fetchQuotaStatus, 5 * 60 * 1000) // 5 minutes
+    return () => clearInterval(quotaTimer)
+  }, [fetchQuotaStatus])
+
+  // Fetch messages when conversation changes (not on every render)
   useEffect(() => {
     if (isGenerating) return
 
@@ -151,75 +225,39 @@ function ChatPage() {
       setIsTimelineOpen(false)
       setIsThinkingToolsActive(false)
     }
-  }, [activeConvIdFromUrl])
-
-  const fetchQuotaStatus = async () => {
-    try {
-      const res = await fetch(`${OpenAPI.BASE}/api/v1/agent/quota`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.ok) {
-        const data = await res.json()
-        if (data.is_limited) {
-          setIsRateLimited(true)
-          setRateLimitError(`Quota limit reached (${data.standard_count}/10 used today).`)
-        } else {
-          setIsRateLimited(false)
-          setRateLimitError(null)
-        }
-      }
-    } catch (e) {
-      console.error("Failed to fetch quota", e)
-    }
-  }
-
-  const fetchMessages = async (convId: string) => {
-    try {
-      const res = await fetch(`${OpenAPI.BASE}/api/v1/agent/conversations/${convId}/messages`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setMessages(
-          data.map((m: any) => ({
-            id: m.id,
-            sender: m.sender,
-            content: m.content,
-            metadata_json: m.metadata_json,
-            created_at: m.created_at,
-          }))
-        )
-      }
-    } catch (e) {
-      console.error("Failed to fetch messages", e)
-    }
-  }
+  }, [activeConvIdFromUrl, isGenerating, fetchMessages])
 
   const handleBranchChat = async (untilMsgId: string) => {
     if (!activeConversationId) return
     try {
-      const res = await fetch(`${OpenAPI.BASE}/api/v1/agent/conversations/${activeConversationId}/branch`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      const res = await fetch(
+        `${OpenAPI.BASE}/api/v1/agent/conversations/${activeConversationId}/branch`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ until_message_id: untilMsgId }),
         },
-        body: JSON.stringify({ until_message_id: untilMsgId }),
-      })
+      )
       if (res.ok) {
         const data = await res.json()
         const newId = data.new_conversation_id
         if (newId) {
           setActiveConversationId(newId)
           fetchMessages(newId)
-          navigate({ to: "/chat", search: { convId: newId } as any, replace: true })
+          navigate({
+            to: "/chat",
+            search: { convId: newId } as any,
+            replace: true,
+          })
         }
       }
     } catch (err) {
       console.error("Branch conversation error", err)
     }
   }
-
 
   const handleCopyMessage = (msgId: string, content: string) => {
     navigator.clipboard.writeText(content)
@@ -282,12 +320,13 @@ function ChatPage() {
       if (response.status === 429) {
         setIsRateLimited(true)
         const errJson = await response.json().catch(() => ({}))
-        const errMsg = errJson.detail || "Daily API rate limit exceeded. Chat disabled."
+        const errMsg =
+          errJson.detail || "Daily API rate limit exceeded. Chat disabled."
         setRateLimitError(errMsg)
         setMessages((prev) =>
           prev.map((msg) =>
-            msg.id === agentMsgId ? { ...msg, content: `⚠️ ${errMsg}` } : msg
-          )
+            msg.id === agentMsgId ? { ...msg, content: `⚠️ ${errMsg}` } : msg,
+          ),
         )
         setIsGenerating(false)
         setIsThinkingToolsActive(false)
@@ -329,10 +368,17 @@ function ChatPage() {
                 if (evt.textChunk?.text) {
                   const chunk = evt.textChunk.text
                   if (chunk.startsWith("[CONVERSATION_ID:")) {
-                    const newId = chunk.replace("[CONVERSATION_ID:", "").replace("]", "").trim()
+                    const newId = chunk
+                      .replace("[CONVERSATION_ID:", "")
+                      .replace("]", "")
+                      .trim()
                     if (newId && !activeConversationId) {
                       setActiveConversationId(newId)
-                      navigate({ to: "/chat", search: { convId: newId } as any, replace: true })
+                      navigate({
+                        to: "/chat",
+                        search: { convId: newId } as any,
+                        replace: true,
+                      })
                     }
                   } else {
                     accumulatedText += chunk
@@ -340,14 +386,23 @@ function ChatPage() {
                     setIsThinkingToolsActive(false)
                     setMessages((prev) =>
                       prev.map((msg) =>
-                        msg.id === agentMsgId ? { ...msg, content: accumulatedText } : msg
-                      )
+                        msg.id === agentMsgId
+                          ? { ...msg, content: accumulatedText }
+                          : msg,
+                      ),
                     )
                   }
                 }
               }
 
-              if (currentEventType === "tool_event" || !currentEventType || evt.toolStart || evt.toolEnd || evt.hrpResult || evt.errorMessage) {
+              if (
+                currentEventType === "tool_event" ||
+                !currentEventType ||
+                evt.toolStart ||
+                evt.toolEnd ||
+                evt.hrpResult ||
+                evt.errorMessage
+              ) {
                 if (evt.toolStart) {
                   toolLogs.push({
                     id: `tool-${Date.now()}-${toolLogs.length}`,
@@ -363,7 +418,9 @@ function ChatPage() {
                   const safeOutput = formatSafeValue(evt.toolEnd.outputJson)
                   const safeTime = formatSafeValue(evt.toolEnd.executionTimeMs)
 
-                  const existingIdx = toolLogs.findIndex((t) => t.toolName === safeName && t.status === "running")
+                  const existingIdx = toolLogs.findIndex(
+                    (t) => t.toolName === safeName && t.status === "running",
+                  )
                   if (existingIdx !== -1) {
                     toolLogs[existingIdx] = {
                       ...toolLogs[existingIdx],
@@ -387,8 +444,10 @@ function ChatPage() {
                   hrpData = evt.hrpResult
                   setMessages((prev) =>
                     prev.map((msg) =>
-                      msg.id === agentMsgId ? { ...msg, hrp_table: hrpData } : msg
-                    )
+                      msg.id === agentMsgId
+                        ? { ...msg, hrp_table: hrpData }
+                        : msg,
+                    ),
                   )
                 }
 
@@ -396,8 +455,10 @@ function ChatPage() {
                   accumulatedText += `\n\n⚠️ ${evt.errorMessage}`
                   setMessages((prev) =>
                     prev.map((msg) =>
-                      msg.id === agentMsgId ? { ...msg, content: accumulatedText } : msg
-                    )
+                      msg.id === agentMsgId
+                        ? { ...msg, content: accumulatedText }
+                        : msg,
+                    ),
                   )
                 }
               }
@@ -410,17 +471,20 @@ function ChatPage() {
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === agentMsgId
-              ? { ...msg, content: msg.content + " [Stopped]" }
-              : msg
-          )
+              ? { ...msg, content: `${msg.content} [Stopped]` }
+              : msg,
+          ),
         )
       } else {
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === agentMsgId
-              ? { ...msg, content: `Error: ${err?.message || "Stream interrupted"}` }
-              : msg
-          )
+              ? {
+                  ...msg,
+                  content: `Error: ${err?.message || "Stream interrupted"}`,
+                }
+              : msg,
+          ),
         )
       }
     } finally {
@@ -429,7 +493,6 @@ function ChatPage() {
       abortControllerRef.current = null
       fetchQuotaStatus()
     }
-
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -439,7 +502,10 @@ function ChatPage() {
     }
   }
 
-  const maxTimeMs = activeToolEvents.reduce((acc, t) => acc + (Number(t.executionTimeMs) || 1200), 0)
+  const maxTimeMs = activeToolEvents.reduce(
+    (acc, t) => acc + (Number(t.executionTimeMs) || 1200),
+    0,
+  )
   const durationSec = Math.max(1, Math.round(maxTimeMs / 1000))
 
   return (
@@ -448,7 +514,10 @@ function ChatPage() {
       {isRateLimited && (
         <div className="bg-rose-100 border-b-2 border-[#27272A] px-4 py-2 text-center text-xs font-bold text-rose-800 flex items-center justify-center gap-2">
           <AlertTriangle className="h-4 w-4" />
-          <span>{rateLimitError || "Rate limit reached. Chat is currently disabled."}</span>
+          <span>
+            {rateLimitError ||
+              "Rate limit reached. Chat is currently disabled."}
+          </span>
         </div>
       )}
 
@@ -460,7 +529,9 @@ function ChatPage() {
               <Bot className="h-7 w-7" />
             </div>
             <div className="space-y-1">
-              <h2 className="font-display text-2xl font-extrabold text-[#27272A]">Finance Agent</h2>
+              <h2 className="font-display text-2xl font-extrabold text-[#27272A]">
+                Finance Agent
+              </h2>
               <p className="text-xs text-[#52525B]">
                 Ask about stocks, understand financials, and get insights
               </p>
@@ -470,7 +541,8 @@ function ChatPage() {
 
         {messages.map((m, mIdx) => {
           const formattedContent = renderFormattedText(m.content)
-          const isLatestAgentMsg = m.sender === "agent" && mIdx === messages.length - 1
+          const isLatestAgentMsg =
+            m.sender === "agent" && mIdx === messages.length - 1
 
           // Divider rendering for branched chats
           if (m.content.startsWith("[BRANCHED_TO:")) {
@@ -479,11 +551,20 @@ function ChatPage() {
             const targetTitle = parts[2]?.replace("]", "") || "New Chat"
 
             return (
-              <div key={m.id} className="flex items-center justify-center my-4 max-w-4xl mx-auto">
+              <div
+                key={m.id}
+                className="flex items-center justify-center my-4 max-w-4xl mx-auto"
+              >
                 <div className="border-t-2 border-dashed border-[#27272A] flex-1" />
                 <button
                   type="button"
-                  onClick={() => targetId && navigate({ to: "/chat", search: { convId: targetId } as any })}
+                  onClick={() =>
+                    targetId &&
+                    navigate({
+                      to: "/chat",
+                      search: { convId: targetId } as any,
+                    })
+                  }
                   className="px-4 py-1.5 rounded-full bg-amber-100 border-2 border-[#27272A] shadow-[1.5px_1.5px_0px_#27272A] text-xs font-bold text-[#27272A] flex items-center gap-2 hover:bg-amber-200 transition-colors mx-3"
                 >
                   <GitBranch className="h-3.5 w-3.5 text-[#2563EB]" />
@@ -500,11 +581,17 @@ function ChatPage() {
             const origTitle = parts[2]?.replace("]", "") || "Previous Chat"
 
             return (
-              <div key={m.id} className="flex items-center justify-center my-4 max-w-4xl mx-auto">
+              <div
+                key={m.id}
+                className="flex items-center justify-center my-4 max-w-4xl mx-auto"
+              >
                 <div className="border-t-2 border-dashed border-[#27272A] flex-1" />
                 <button
                   type="button"
-                  onClick={() => origId && navigate({ to: "/chat", search: { convId: origId } as any })}
+                  onClick={() =>
+                    origId &&
+                    navigate({ to: "/chat", search: { convId: origId } as any })
+                  }
                   className="px-4 py-1.5 rounded-full bg-blue-100 border-2 border-[#27272A] shadow-[1.5px_1.5px_0px_#27272A] text-xs font-bold text-[#27272A] flex items-center gap-2 hover:bg-blue-200 transition-colors mx-3"
                 >
                   <GitBranch className="h-3.5 w-3.5 text-[#2563EB]" />
@@ -526,53 +613,79 @@ function ChatPage() {
                 </div>
               )}
 
-              <div className={`space-y-3 ${m.sender === "user" ? "max-w-[80%]" : "max-w-[calc(100%-2.75rem)] flex-1"}`}>
+              <div
+                className={`space-y-3 ${m.sender === "user" ? "max-w-[80%]" : "max-w-[calc(100%-2.75rem)] flex-1"}`}
+              >
                 {/* Render Tool Events ON TOP of AI response */}
-                {m.sender === "agent" && isLatestAgentMsg && activeToolEvents.length > 0 && (
-                  <div className="mb-2">
-                    {isThinkingToolsActive ? (
-                      /* Persistently active while tools are executing */
-                      <div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            setIsTimelineOpen((prev) => !prev)
-                          }}
-                          className="flex items-center gap-2 text-xs font-bold text-[#27272A] hover:text-black transition-colors py-1 px-2 rounded hover:bg-black/5"
-                        >
-                          <CustomSpinner size="sm" />
-                          <span>Running tools • {formatSafeValue(activeToolEvents[activeToolEvents.length - 1]?.toolName)}</span>
-                          <ChevronRight className={`h-4 w-4 text-[#27272A] transition-transform duration-200 ml-1 ${isTimelineOpen ? "rotate-90" : ""}`} />
-                        </button>
+                {m.sender === "agent" &&
+                  isLatestAgentMsg &&
+                  activeToolEvents.length > 0 && (
+                    <div className="mb-2">
+                      {isThinkingToolsActive ? (
+                        /* Persistently active while tools are executing */
+                        <div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              setIsTimelineOpen((prev) => !prev)
+                            }}
+                            className="flex items-center gap-2 text-xs font-bold text-[#27272A] hover:text-black transition-colors py-1 px-2 rounded hover:bg-black/5"
+                          >
+                            <CustomSpinner size="sm" />
+                            <span>
+                              Running tools •{" "}
+                              {formatSafeValue(
+                                activeToolEvents[activeToolEvents.length - 1]
+                                  ?.toolName,
+                              )}
+                            </span>
+                            <ChevronRight
+                              className={`h-4 w-4 text-[#27272A] transition-transform duration-200 ml-1 ${isTimelineOpen ? "rotate-90" : ""}`}
+                            />
+                          </button>
 
-                        {isTimelineOpen && (
-                          <div className="mt-2 p-3 rounded-lg bg-[#FFFBEB] border-2 border-[#27272A] shadow-[2px_2px_0px_#27272A] space-y-2 text-xs">
-                            {activeToolEvents.map((t, idx) => (
-                              <div key={t.id || idx} className="p-2 rounded bg-white border border-[#27272A] space-y-1">
-                                <div className="font-mono font-bold flex items-center justify-between">
-                                  <span>{formatSafeValue(t.toolName)}</span>
-                                  <span className="text-[10px] text-gray-500 font-normal">{formatSafeValue(t.executionTimeMs)}ms</span>
+                          {isTimelineOpen && (
+                            <div className="mt-2 p-3 rounded-lg bg-[#FFFBEB] border-2 border-[#27272A] shadow-[2px_2px_0px_#27272A] space-y-2 text-xs">
+                              {activeToolEvents.map((t, idx) => (
+                                <div
+                                  key={t.id || idx}
+                                  className="p-2 rounded bg-white border border-[#27272A] space-y-1"
+                                >
+                                  <div className="font-mono font-bold flex items-center justify-between">
+                                    <span>{formatSafeValue(t.toolName)}</span>
+                                    <span className="text-[10px] text-gray-500 font-normal">
+                                      {formatSafeValue(t.executionTimeMs)}ms
+                                    </span>
+                                  </div>
+                                  {t.argumentsJson && (
+                                    <div className="text-[11px] font-mono text-gray-700 bg-gray-50 p-1 rounded">
+                                      {formatFriendlyJson(t.argumentsJson)}
+                                    </div>
+                                  )}
+                                  {t.outputJson && (
+                                    <div className="text-[11px] font-mono text-gray-700 bg-gray-50 p-1 rounded">
+                                      {formatFriendlyJson(t.outputJson)}
+                                    </div>
+                                  )}
                                 </div>
-                                {t.argumentsJson && <div className="text-[11px] font-mono text-gray-700 bg-gray-50 p-1 rounded">{formatFriendlyJson(t.argumentsJson)}</div>}
-                                {t.outputJson && <div className="text-[11px] font-mono text-gray-700 bg-gray-50 p-1 rounded">{formatFriendlyJson(t.outputJson)}</div>}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      /* Only after final text stream starts: non-expandable 'Thought for Xs' */
-                      <div className="flex items-center gap-1.5 text-xs text-[#52525B] font-semibold py-1 px-2">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                        <span>Thought for {durationSec}s</span>
-                      </div>
-                    )}
-                  </div>
-                )}
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* Only after final text stream starts: non-expandable 'Thought for Xs' */
+                        <div className="flex items-center gap-1.5 text-xs text-[#52525B] font-semibold py-1 px-2">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span>Thought for {durationSec}s</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
-                {(formattedContent || (isGenerating && m.sender === "agent")) && (
+                {(formattedContent ||
+                  (isGenerating && m.sender === "agent")) && (
                   <div
                     className={`relative p-4 rounded-lg text-xs md:text-sm leading-relaxed ${
                       m.sender === "user"
@@ -589,7 +702,9 @@ function ChatPage() {
                     )}
 
                     {/* Action Toolbar: Copy (User & Agent) & Branch Out (Agent only) - Vertical Stack */}
-                    <div className={`opacity-0 group-hover:opacity-100 transition-opacity absolute flex flex-col gap-1.5 top-2 ${m.sender === "user" ? "-left-8" : "-right-8"}`}>
+                    <div
+                      className={`opacity-0 group-hover:opacity-100 transition-opacity absolute flex flex-col gap-1.5 top-2 ${m.sender === "user" ? "-left-8" : "-right-8"}`}
+                    >
                       <Button
                         type="button"
                         variant="ghost"
@@ -621,13 +736,14 @@ function ChatPage() {
                   </div>
                 )}
 
-
                 {/* HRP Portfolio Allocation Table */}
-                {m.hrp_table && m.hrp_table.symbols && (
+                {m.hrp_table?.symbols && (
                   <div className="bg-white border-2 border-[#27272A] shadow-[3px_3px_0px_#27272A] rounded-lg p-4 space-y-3 text-[#27272A] w-full">
                     <div className="flex items-center gap-2 border-b-2 border-[#27272A] pb-2">
                       <BarChart3 className="h-4 w-4 text-[#2563EB]" />
-                      <span className="text-xs font-extrabold font-display">HRP Portfolio Weight Allocation</span>
+                      <span className="text-xs font-extrabold font-display">
+                        HRP Portfolio Weight Allocation
+                      </span>
                     </div>
                     <div className="space-y-2">
                       {m.hrp_table.symbols.map((sym, idx) => {
@@ -674,10 +790,16 @@ function ChatPage() {
       {/* Floating Gemini Neubrutal Chatbox at Bottom Center */}
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-3xl bg-white border-2 border-[#27272A] shadow-[4px_4px_0px_#27272A] rounded-xl p-3.5 space-y-2.5 z-30">
         <textarea
-          placeholder={isRateLimited ? "Chat disabled due to rate limit" : "Ask anything..."}
+          placeholder={
+            isRateLimited
+              ? "Chat disabled due to rate limit"
+              : "Ask anything..."
+          }
           value={inputMessage}
           disabled={isRateLimited}
-          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInputMessage(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+            setInputMessage(e.target.value)
+          }
           onKeyDown={handleKeyDown}
           rows={2}
           className="w-full resize-none text-xs md:text-sm font-medium border-0 focus-visible:ring-0 focus-visible:outline-none p-1 text-[#27272A] bg-transparent disabled:opacity-50"
@@ -686,23 +808,53 @@ function ChatPage() {
         <div className="flex items-center justify-between border-t border-[#27272A] pt-2">
           {/* Left: Model Selector inside Floating Chatbox */}
           <div className="flex items-center gap-2">
-            <Select value={selectedModel} onValueChange={handleModelChange} disabled={isRateLimited}>
+            <Select
+              value={selectedModel}
+              onValueChange={handleModelChange}
+              disabled={isRateLimited}
+            >
               <SelectTrigger className="h-8 text-[11px] font-bold bg-[#FAF6F0] border border-[#27272A] text-[#27272A] shadow-[1px_1px_0px_#27272A] w-[240px]">
                 <SelectValue placeholder="Select Model" />
               </SelectTrigger>
               <SelectContent className="bg-white border-2 border-[#27272A]">
-                <SelectItem value="gemini-3.5-flash-lite" className="text-xs font-semibold">
+                <SelectItem
+                  value="gemini-3.5-flash-lite"
+                  className="text-xs font-semibold"
+                >
                   Gemini 3.5 Flash Lite (Standard - 10/day)
                 </SelectItem>
-                <SelectItem value="gemini-3.5-flash" className="text-xs font-semibold">
+                <SelectItem
+                  value="gemini-3.5-flash"
+                  className="text-xs font-semibold"
+                >
                   Gemini 3.5 Flash (Upgraded - 3/day)
                 </SelectItem>
-                <SelectItem value="gemini-2.5-pro" className="text-xs font-semibold">
+                <SelectItem
+                  value="gemini-2.5-pro"
+                  className="text-xs font-semibold"
+                >
                   Gemini 2.5 Pro (Pro - 1/day)
+                </SelectItem>
+                <SelectItem
+                  value="gpt-5.6-luna"
+                  className="text-xs font-semibold"
+                >
+                  OpenAI GPT-5.6 Luna (Research - 1/day)
                 </SelectItem>
               </SelectContent>
             </Select>
           </div>
+
+          {/* Research Mode Toggle */}
+          <label className="flex items-center gap-2 px-2 py-1 rounded text-xs font-semibold cursor-pointer hover:bg-[#F0F0F0] transition">
+            <input
+              type="checkbox"
+              checked={isResearchMode}
+              onChange={(e) => setIsResearchMode(e.target.checked)}
+              className="w-4 h-4 accent-[#2563EB]"
+            />
+            <span>Research Mode</span>
+          </label>
 
           {/* Right: Action Buttons */}
           <div className="flex items-center gap-2">

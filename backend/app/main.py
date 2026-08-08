@@ -34,6 +34,11 @@ async def lifespan(app: FastAPI):
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         init_db(session)
+    
+    # Initialize LangSmith observability (free tier: only if configured)
+    from app.core.langsmith_client import enable_langsmith_tracing
+    enable_langsmith_tracing()
+    
     yield
 
 
@@ -77,25 +82,53 @@ app.add_middleware(
 )
 
 
-from fastapi.responses import FileResponse, Response
+import logging
+import traceback
+from fastapi.responses import FileResponse, Response, JSONResponse
 
-# Include API Router first under /api/v1
+logger = logging.getLogger(__name__)
+
+# Global 500 Exception Handler for transparent error logging & responses
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(
+        f"Unhandled Exception on {request.method} {request.url.path}: {str(exc)}\n{traceback.format_exc()}"
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"Internal Server Error: {str(exc)}",
+            "path": str(request.url.path),
+        },
+    )
+
+# Include API Router under /api/v1 prefix
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
-# Mount static frontend files and serve SPA routes
+# Mount static frontend files and serve SPA routes safely
 if FRONTEND_DIR.exists():
     if (FRONTEND_DIR / "assets").exists():
         app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        if full_path.startswith("api/"):
-            return Response(status_code=404)
+        # Exclude API endpoints, docs, openapi, and assets from SPA fallback
+        if (
+            full_path.startswith("api/")
+            or full_path == "api"
+            or full_path.startswith("docs")
+            or full_path.startswith("openapi")
+            or full_path.startswith("redoc")
+            or full_path.startswith("assets/")
+        ):
+            return JSONResponse(status_code=404, content={"detail": f"API endpoint '{full_path}' not found"})
+
         file_path = FRONTEND_DIR / full_path
         if file_path.is_file():
             return FileResponse(file_path)
         index_file = FRONTEND_DIR / "index.html"
         if index_file.exists():
             return FileResponse(index_file)
-        return Response(status_code=404)
+        return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
 
