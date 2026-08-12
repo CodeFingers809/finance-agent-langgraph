@@ -1,19 +1,21 @@
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router"
 import {
-  AlertTriangle,
   ArrowUp,
   BarChart3,
   Bot,
-  Check,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
-  Copy,
   GitBranch,
   Square,
   User,
 } from "lucide-react"
+
 import { useEffect, useRef, useState, useCallback } from "react"
 import { OpenAPI } from "@/client"
+import { authFetch, authHeader } from "@/lib/authFetch"
+import { MessageActionBar } from "@/components/Chat/MessageActionBar"
+import { ChartArtifacts } from "@/components/Chat/ChartArtifacts"
 import { CustomSpinner } from "@/components/Common/CustomSpinner"
 import { MarkdownRenderer } from "@/components/Common/MarkdownRenderer"
 import { Button } from "@/components/ui/button"
@@ -28,6 +30,15 @@ import {
   decodeProtobufEvent,
   type ParsedStreamEvent,
 } from "@/proto/financial_agent"
+
+const getApiUrl = (path: string) => {
+  const base = OpenAPI.BASE || "http://localhost:8000/api/v1"
+  const cleanBase = base.endsWith("/") ? base.slice(0, -1) : base
+  const hasApiV1 = cleanBase.includes("/api/v1")
+  const prefix = hasApiV1 ? cleanBase : `${cleanBase}/api/v1`
+  const cleanPath = path.startsWith("/") ? path : `/${path}`
+  return `${prefix}${cleanPath}`
+}
 
 export const Route = createFileRoute("/_layout/chat")({
   component: ChatPage,
@@ -46,7 +57,12 @@ interface ChatMessageItem {
   created_at?: string
   tool_events?: any[]
   hrp_table?: { symbols: string[]; weights: number[]; summaryNotes: string }
+  priceChart?: any
+  growthChart?: any
+  analystChart?: any
+  fiiDiiChart?: any
 }
+
 
 function formatSafeValue(val: any): string {
   if (val === null || val === undefined) return ""
@@ -63,41 +79,7 @@ function formatSafeValue(val: any): string {
   return String(val)
 }
 
-function formatFriendlyJson(raw: any): string {
-  if (!raw) return ""
-  let obj = raw
-  if (typeof raw === "string") {
-    try {
-      obj = JSON.parse(raw)
-    } catch {
-      return raw.length > 120 ? `${raw.slice(0, 120)}...` : raw
-    }
-  }
 
-  if (typeof obj !== "object" || obj === null) return String(obj)
-
-  const pairs: string[] = []
-  for (const [key, val] of Object.entries(obj)) {
-    if (val === null || val === undefined) continue
-    const formattedKey = key
-      .replace(/([A-Z])/g, " $1")
-      .replace(/_/g, " ")
-      .toLowerCase()
-    let valStr = ""
-    if (Array.isArray(val)) {
-      valStr = val
-        .map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v)))
-        .join(", ")
-    } else if (typeof val === "object") {
-      valStr = JSON.stringify(val)
-    } else {
-      valStr = String(val)
-    }
-    if (valStr.length > 80) valStr = `${valStr.slice(0, 80)}...`
-    pairs.push(`${formattedKey}: ${valStr}`)
-  }
-  return pairs.join(" • ")
-}
 
 function renderFormattedText(rawText: string): string {
   if (!rawText) return ""
@@ -123,95 +105,129 @@ function ChatPage() {
   const search = useSearch({ from: "/_layout/chat" })
   const activeConvIdFromUrl = search?.convId
 
-  const [activeConversationId, setActiveConversationId] = useState<
-    string | null
-  >(activeConvIdFromUrl || null)
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(
+    activeConvIdFromUrl || null,
+  )
   const [messages, setMessages] = useState<ChatMessageItem[]>([])
+
   const [inputMessage, setInputMessage] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
   const [isThinkingToolsActive, setIsThinkingToolsActive] = useState(false)
   const [isRateLimited, setIsRateLimited] = useState(false)
-  const [rateLimitError, setRateLimitError] = useState<string | null>(null)
   const [activeToolEvents, setActiveToolEvents] = useState<any[]>([])
+
+
+
   const [isTimelineOpen, setIsTimelineOpen] = useState(false)
-  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null)
   const [selectedModel, setSelectedModel] = useState<string>(() => {
     return (
       localStorage.getItem("selected_gemini_model") || "gemini-3.5-flash-lite"
     )
   })
   const [isResearchMode, setIsResearchMode] = useState(false)
+  const [researchStage, setResearchStage] = useState<string | null>(null)
+  const [isResearchLogOpen, setIsResearchLogOpen] = useState(false)
+  const [researchLogHistory, setResearchLogHistory] = useState<string[]>([])
+
+
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const chatContainerRef = useRef<HTMLDivElement>(null)
+  const isUserScrolledUpRef = useRef(false)
   const abortControllerRef = useRef<AbortController | null>(null)
-  const token = localStorage.getItem("access_token")
+
+  const scrollToBottom = useCallback((smooth = true) => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: smooth ? "smooth" : "auto",
+      })
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" })
+    }
+  }, [])
+
+  const handleScroll = useCallback(() => {
+    const el = chatContainerRef.current
+    if (!el) return
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+    isUserScrolledUpRef.current = !isAtBottom
+  }, [])
+
+  // Auto-scroll when messages update (e.g. streaming answer) if user hasn't scrolled up
+  useEffect(() => {
+    if (messages.length > 0 && !isUserScrolledUpRef.current) {
+      scrollToBottom(true)
+    }
+  }, [messages, scrollToBottom])
 
   // Fetch quota status — only once on mount, then every 5 minutes (cached)
   const fetchQuotaStatus = useCallback(async () => {
     try {
-      const authToken = localStorage.getItem("access_token")
-      if (!authToken) return
-      const res = await fetch(`${OpenAPI.BASE}/api/v1/agent/quota`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      })
+      const res = await authFetch("/agent/quota")
       if (res.ok) {
         const data = await res.json()
         if (data.is_limited) {
           setIsRateLimited(true)
-          setRateLimitError(
-            `Quota limit reached (${data.standard_count}/10 used today).`,
-          )
         } else {
           setIsRateLimited(false)
-          setRateLimitError(null)
         }
       }
     } catch (e) {
       console.error("Failed to fetch quota", e)
     }
-  }, []) // No dependencies — stable function, won't trigger useEffect unnecessarily
+  }, [])
 
-  // Fetch messages for active conversation — only when convId changes
+  // Fetch messages for active conversation
   const fetchMessages = useCallback(async (convId: string) => {
     try {
-      const authToken = localStorage.getItem("access_token")
-      if (!authToken) return
-      const res = await fetch(
-        `${OpenAPI.BASE}/api/v1/agent/conversations/${convId}/messages`,
-        {
-          headers: { Authorization: `Bearer ${authToken}` },
-        },
-      )
+      const res = await authFetch(`/agent/conversations/${convId}/messages`)
       if (res.ok) {
         const data = await res.json()
         setMessages(
-          data.map((m: any) => ({
-            id: m.id,
-            sender: m.sender,
-            content: m.content,
-            metadata_json: m.metadata_json,
-            created_at: m.created_at,
-          })),
+          data.map((m: any) => {
+            let meta: any = {}
+            if (m.metadata_json) {
+              try {
+                meta =
+                  typeof m.metadata_json === "string"
+                    ? JSON.parse(m.metadata_json)
+                    : m.metadata_json
+              } catch (_e) {
+                // ignore
+              }
+            }
+            return {
+              id: m.id,
+              sender: m.sender,
+              content: m.content,
+              metadata_json: m.metadata_json,
+              created_at: m.created_at,
+              priceChart: meta?.priceChart || m.priceChart,
+              growthChart: meta?.growthChart || m.growthChart,
+              analystChart: meta?.analystChart || m.analystChart,
+              fiiDiiChart: meta?.fiiDiiChart || m.fiiDiiChart,
+              hrp_table: meta?.hrp_table || m.hrp_table,
+            }
+          }),
         )
+        // Reset scroll position to bottom on conversation load
+        isUserScrolledUpRef.current = false
+        setTimeout(() => scrollToBottom(false), 50)
       }
     } catch (e) {
       console.error("Failed to fetch messages", e)
     }
-  }, []) // No dependencies — stable function
+  }, [scrollToBottom])
 
-  // Initialize scroll on mount
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [])
-
-  // Fetch quota on mount only; refetch every 5 min (stop polling for efficiency)
+  // Fetch quota on mount only; refetch every 5 min
   useEffect(() => {
     fetchQuotaStatus()
-    const quotaTimer = setInterval(fetchQuotaStatus, 5 * 60 * 1000) // 5 minutes
+    const quotaTimer = setInterval(fetchQuotaStatus, 5 * 60 * 1000)
     return () => clearInterval(quotaTimer)
   }, [fetchQuotaStatus])
 
-  // Fetch messages when conversation changes (not on every render)
+  // Fetch messages when conversation changes
   useEffect(() => {
     if (isGenerating) return
 
@@ -230,14 +246,11 @@ function ChatPage() {
   const handleBranchChat = async (untilMsgId: string) => {
     if (!activeConversationId) return
     try {
-      const res = await fetch(
-        `${OpenAPI.BASE}/api/v1/agent/conversations/${activeConversationId}/branch`,
+      const res = await authFetch(
+        `/agent/conversations/${activeConversationId}/branch`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ until_message_id: untilMsgId }),
         },
       )
@@ -257,12 +270,6 @@ function ChatPage() {
     } catch (err) {
       console.error("Branch conversation error", err)
     }
-  }
-
-  const handleCopyMessage = (msgId: string, content: string) => {
-    navigator.clipboard.writeText(content)
-    setCopiedMsgId(msgId)
-    setTimeout(() => setCopiedMsgId(null), 2000)
   }
 
   const handleModelChange = (value: string) => {
@@ -298,22 +305,40 @@ function ChatPage() {
     setIsThinkingToolsActive(true)
     setActiveToolEvents([])
     setIsTimelineOpen(false)
+    setResearchStage(null)
+    setResearchLogHistory([])
 
     const controller = new AbortController()
     abortControllerRef.current = controller
 
-    try {
-      const response = await fetch(`${OpenAPI.BASE}/api/v1/agent/chat/stream`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+    const streamUrl = isResearchMode
+      ? getApiUrl("/agent/research/stream")
+      : getApiUrl("/agent/chat/stream")
+
+    const streamBody = isResearchMode
+      ? {
+          query: userText,
+          model_name: selectedModel,
+          conversation_id: activeConversationId || null,
+        }
+      : {
           conversation_id: activeConversationId || null,
           message: userText,
           model_name: selectedModel,
-        }),
+        }
+
+
+    let accumulatedText = ""
+
+    try {
+
+      const response = await fetch(streamUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await authHeader()),
+        },
+        body: JSON.stringify(streamBody),
         signal: controller.signal,
       })
 
@@ -322,12 +347,12 @@ function ChatPage() {
         const errJson = await response.json().catch(() => ({}))
         const errMsg =
           errJson.detail || "Daily API rate limit exceeded. Chat disabled."
-        setRateLimitError(errMsg)
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === agentMsgId ? { ...msg, content: `⚠️ ${errMsg}` } : msg,
           ),
         )
+
         setIsGenerating(false)
         setIsThinkingToolsActive(false)
         return
@@ -339,10 +364,10 @@ function ChatPage() {
 
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
-
-      let accumulatedText = ""
       const toolLogs: any[] = []
       let hrpData: any = null
+
+
 
       if (reader) {
         let buffer = ""
@@ -367,11 +392,14 @@ function ChatPage() {
               if (currentEventType === "text_stream" || evt.textChunk?.text) {
                 if (evt.textChunk?.text) {
                   const chunk = evt.textChunk.text
-                  if (chunk.startsWith("[CONVERSATION_ID:")) {
-                    const newId = chunk
-                      .replace("[CONVERSATION_ID:", "")
-                      .replace("]", "")
-                      .trim()
+                  if (
+                    chunk.startsWith("[CONVERSATION_ID:") ||
+                    chunk.startsWith("[RESEARCH_CONVERSATION_ID:")
+                  ) {
+                    const tag = chunk.startsWith("[RESEARCH_CONVERSATION_ID:")
+                      ? "[RESEARCH_CONVERSATION_ID:"
+                      : "[CONVERSATION_ID:"
+                    const newId = chunk.replace(tag, "").replace("]", "").trim()
                     if (newId && !activeConversationId) {
                       setActiveConversationId(newId)
                       navigate({
@@ -380,9 +408,39 @@ function ChatPage() {
                         replace: true,
                       })
                     }
+                  } else if (chunk.startsWith("[RESEARCH_STAGE:")) {
+                    const stageStr = chunk
+                      .replace("[RESEARCH_STAGE:", "")
+                      .replace("]", "")
+                    const parts = stageStr.split(":")
+                    const stage = parts[0]
+                    const status = parts[1]
+                    const detail = parts.slice(2).join(":")
+
+                    let logText = ""
+                    if (detail && detail.trim()) {
+                      logText = detail.trim()
+                    } else {
+                      const stageLabels: Record<string, string> = {
+                        data_gathering: "Phase 1: Iterative Data Gathering",
+                        synthesis: "Phase 2: Synthesizing Final Research Report",
+                      }
+                      const label = stageLabels[stage] || stage
+                      logText = `${label} (${status === "running" || status === "planning" || status === "executing" ? "In Progress..." : "Complete"})`
+                    }
+
+                    setResearchStage(logText)
+                    setResearchLogHistory((prev) =>
+                      prev.includes(logText) ? prev : [...prev, logText],
+                    )
                   } else {
-                    accumulatedText += chunk
-                    // As soon as text stream starts, deactivate running tools mode
+                    let cleanChunk = chunk
+                    if (cleanChunk.includes("[{'type':") || cleanChunk.includes('[{"type":')) {
+                      cleanChunk = cleanChunk
+                        .replace(/\[\{'type':\s*'text',\s*'text':\s*'(.*?)'(?:,\s*'index':\s*\d+)?\}\]/g, "$1")
+                        .replace(/\[\{"type":\s*"text",\s*"text":\s*"(.*?)"(?:,\s*"index":\s*\d+)?\}\]/g, "$1")
+                    }
+                    accumulatedText += cleanChunk
                     setIsThinkingToolsActive(false)
                     setMessages((prev) =>
                       prev.map((msg) =>
@@ -394,6 +452,7 @@ function ChatPage() {
                   }
                 }
               }
+
 
               if (
                 currentEventType === "tool_event" ||
@@ -451,6 +510,27 @@ function ChatPage() {
                   )
                 }
 
+                if (
+                  evt.priceChart ||
+                  evt.growthChart ||
+                  evt.analystChart ||
+                  evt.fiiDiiChart
+                ) {
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === agentMsgId
+                        ? {
+                            ...msg,
+                            ...(evt.priceChart ? { priceChart: evt.priceChart } : {}),
+                            ...(evt.growthChart ? { growthChart: evt.growthChart } : {}),
+                            ...(evt.analystChart ? { analystChart: evt.analystChart } : {}),
+                            ...(evt.fiiDiiChart ? { fiiDiiChart: evt.fiiDiiChart } : {}),
+                          }
+                        : msg,
+                    ),
+                  )
+                }
+
                 if (evt.errorMessage) {
                   accumulatedText += `\n\n⚠️ ${evt.errorMessage}`
                   setMessages((prev) =>
@@ -476,12 +556,17 @@ function ChatPage() {
           ),
         )
       } else {
+        const errorDetail = err?.message || "Stream connection failed"
+        const friendlyMsg = accumulatedText
+          ? `${accumulatedText}\n\n⚠️ Error: ${errorDetail}. Please wait a few seconds and try again.`
+          : `⚠️ Error: ${errorDetail}. Please wait a few seconds and try again.`
+
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === agentMsgId
               ? {
                   ...msg,
-                  content: `Error: ${err?.message || "Stream interrupted"}`,
+                  content: friendlyMsg,
                 }
               : msg,
           ),
@@ -503,37 +588,29 @@ function ChatPage() {
   }
 
   const maxTimeMs = activeToolEvents.reduce(
-    (acc, t) => acc + (Number(t.executionTimeMs) || 1200),
+    (max, event) => Math.max(max, event.executionTimeMs || 0),
     0,
   )
-  const durationSec = Math.max(1, Math.round(maxTimeMs / 1000))
 
   return (
-    <div className="relative h-full w-full bg-[#FAF6F0] text-[#27272A]">
-      {/* Rate limit warning banner */}
-      {isRateLimited && (
-        <div className="bg-rose-100 border-b-2 border-[#27272A] px-4 py-2 text-center text-xs font-bold text-rose-800 flex items-center justify-center gap-2">
-          <AlertTriangle className="h-4 w-4" />
-          <span>
-            {rateLimitError ||
-              "Rate limit reached. Chat is currently disabled."}
-          </span>
-        </div>
-      )}
-
-      {/* Scrollable Chat Area */}
-      <div className="h-full overflow-y-auto px-4 md:px-8 pt-6 pb-64 space-y-6">
+    <div className="relative h-[calc(100vh-4rem)] flex flex-col bg-[#FAF6F0] overflow-hidden font-sans">
+      {/* Main Chat Messages Stream Container */}
+      <div
+        ref={chatContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-4 md:px-8 pt-4 pb-32 space-y-6"
+      >
         {messages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center text-center max-w-lg mx-auto space-y-3 pt-24">
-            <div className="h-14 w-14 rounded-xl bg-amber-200 border-2 border-[#27272A] shadow-[2.5px_2.5px_0px_#27272A] flex items-center justify-center text-[#27272A]">
-              <Bot className="h-7 w-7" />
+          <div className="flex flex-col items-center justify-center h-full max-w-lg mx-auto text-center space-y-4 py-12">
+            <div className="h-16 w-16 rounded-2xl bg-amber-200 border-2 border-[#27272A] shadow-[3px_3px_0px_#27272A] flex items-center justify-center text-[#27272A]">
+              <Bot className="h-8 w-8" />
             </div>
-            <div className="space-y-1">
-              <h2 className="font-display text-2xl font-extrabold text-[#27272A]">
-                Finance Agent
+            <div className="space-y-2">
+              <h2 className="font-display font-extrabold text-xl text-[#27272A]">
+                Financial Intelligence Terminal
               </h2>
-              <p className="text-xs text-[#52525B]">
-                Ask about stocks, understand financials, and get insights
+              <p className="text-xs text-[#52525B] font-medium leading-relaxed">
+                Ask about Indian stock prices, fundamental financials, technical indicators, news, portfolio HRP optimization, or enable Research Mode for deep multi-sector analysis.
               </p>
             </div>
           </div>
@@ -590,12 +667,15 @@ function ChatPage() {
                   type="button"
                   onClick={() =>
                     origId &&
-                    navigate({ to: "/chat", search: { convId: origId } as any })
+                    navigate({
+                      to: "/chat",
+                      search: { convId: origId } as any,
+                    })
                   }
-                  className="px-4 py-1.5 rounded-full bg-blue-100 border-2 border-[#27272A] shadow-[1.5px_1.5px_0px_#27272A] text-xs font-bold text-[#27272A] flex items-center gap-2 hover:bg-blue-200 transition-colors mx-3"
+                  className="px-4 py-1.5 rounded-full bg-[#F3ECE1] border-2 border-[#27272A] shadow-[1.5px_1.5px_0px_#27272A] text-xs font-bold text-[#27272A] flex items-center gap-2 hover:bg-amber-100 transition-colors mx-3"
                 >
                   <GitBranch className="h-3.5 w-3.5 text-[#2563EB]" />
-                  <span>↰ Branched from previous chat: {origTitle}</span>
+                  <span>↳ Continuation of: {origTitle}</span>
                 </button>
                 <div className="border-t-2 border-dashed border-[#27272A] flex-1" />
               </div>
@@ -605,8 +685,20 @@ function ChatPage() {
           return (
             <div
               key={m.id}
-              className={`group relative flex gap-3 max-w-4xl mx-auto ${m.sender === "user" ? "justify-end" : "justify-start w-full"}`}
+              id={`message-bubble-${m.id}`}
+              className={`relative flex items-start gap-2 max-w-4xl mx-auto group ${
+                m.sender === "user" ? "justify-end" : "justify-start"
+              }`}
             >
+              {/* User Message Action Buttons (Sticky Left Side: Copy only) */}
+              {m.sender === "user" && (
+                <MessageActionBar
+                  message={m}
+                  conversationId={activeConversationId}
+                  onBranch={handleBranchChat}
+                />
+              )}
+
               {m.sender === "agent" && (
                 <div className="h-8 w-8 rounded bg-amber-200 border-2 border-[#27272A] shadow-[1.5px_1.5px_0px_#27272A] flex items-center justify-center text-[#27272A] shrink-0 mt-1">
                   <Bot className="h-4 w-4" />
@@ -614,8 +706,47 @@ function ChatPage() {
               )}
 
               <div
-                className={`space-y-3 ${m.sender === "user" ? "max-w-[80%]" : "max-w-[calc(100%-2.75rem)] flex-1"}`}
+                className={`space-y-3 ${m.sender === "user" ? "max-w-[80%]" : "max-w-[calc(100%-5rem)] flex-1"}`}
               >
+                {/* Expandable Neubrutalist Research Mode Stage Progress ON TOP of AI response */}
+                {m.sender === "agent" &&
+                  isLatestAgentMsg &&
+                  isResearchMode &&
+                  (isGenerating || researchStage) && (
+                    <div className="mb-2.5 rounded-lg bg-amber-100 border-2 border-[#27272A] shadow-[2.5px_2.5px_0px_#27272A] overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setIsResearchLogOpen((prev) => !prev)
+                        }}
+                        className="w-full p-2.5 text-xs font-bold text-[#27272A] flex items-center justify-between hover:bg-amber-200/70 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 text-left">
+                          {isGenerating && <CustomSpinner size="sm" />}
+                          <span>
+                            🔍 Research Mode: {researchStage || "Running research engine..."}
+                          </span>
+                        </div>
+                        <ChevronRight
+                          className={`h-4 w-4 text-[#27272A] shrink-0 transition-transform duration-200 ${isResearchLogOpen ? "rotate-90" : ""}`}
+                        />
+                      </button>
+
+                      {isResearchLogOpen && researchLogHistory.length > 0 && (
+                        <div className="p-3 bg-white border-t-2 border-[#27272A] space-y-1.5 text-[11px] font-mono max-h-48 overflow-y-auto">
+                          {researchLogHistory.map((log, idx) => (
+                            <div key={idx} className="flex items-start gap-2 text-gray-800">
+                              <span className="text-amber-700 font-bold shrink-0">•</span>
+                              <span>{log}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                 {/* Render Tool Events ON TOP of AI response */}
                 {m.sender === "agent" &&
                   isLatestAgentMsg &&
@@ -623,118 +754,125 @@ function ChatPage() {
                     <div className="mb-2">
                       {isThinkingToolsActive ? (
                         /* Persistently active while tools are executing */
-                        <div>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              setIsTimelineOpen((prev) => !prev)
-                            }}
-                            className="flex items-center gap-2 text-xs font-bold text-[#27272A] hover:text-black transition-colors py-1 px-2 rounded hover:bg-black/5"
-                          >
-                            <CustomSpinner size="sm" />
-                            <span>
-                              Running tools •{" "}
-                              {formatSafeValue(
-                                activeToolEvents[activeToolEvents.length - 1]
-                                  ?.toolName,
-                              )}
-                            </span>
-                            <ChevronRight
-                              className={`h-4 w-4 text-[#27272A] transition-transform duration-200 ml-1 ${isTimelineOpen ? "rotate-90" : ""}`}
-                            />
-                          </button>
+                        <div className="rounded-lg bg-amber-100 border-2 border-[#27272A] shadow-[2px_2px_0px_#27272A] p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <CustomSpinner size="sm" />
+                              <span className="text-xs font-extrabold text-[#27272A] font-display">
+                                Analyzing Market Data & Executing Tools...
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setIsTimelineOpen(!isTimelineOpen)}
+                              className="text-[11px] font-bold text-[#2563EB] hover:underline flex items-center gap-1"
+                            >
+                              <span>
+                                {isTimelineOpen ? "Hide Tools" : "Show Tools"}
+                              </span>
+                              <ChevronDown
+                                className={`h-3.5 w-3.5 transition-transform duration-200 ${
+                                  isTimelineOpen ? "rotate-180" : ""
+                                }`}
+                              />
+                            </button>
+                          </div>
 
+                          {/* Smooth expandable drawer showing running tools */}
                           {isTimelineOpen && (
-                            <div className="mt-2 p-3 rounded-lg bg-[#FFFBEB] border-2 border-[#27272A] shadow-[2px_2px_0px_#27272A] space-y-2 text-xs">
-                              {activeToolEvents.map((t, idx) => (
+                            <div className="pt-2 border-t border-[#27272A]/20 space-y-1.5">
+                              {activeToolEvents.map((t) => (
                                 <div
-                                  key={t.id || idx}
-                                  className="p-2 rounded bg-white border border-[#27272A] space-y-1"
+                                  key={t.id}
+                                  className="text-[11px] font-mono flex items-center justify-between bg-white/80 px-2 py-1 rounded border border-[#27272A]/30"
                                 >
-                                  <div className="font-mono font-bold flex items-center justify-between">
-                                    <span>{formatSafeValue(t.toolName)}</span>
-                                    <span className="text-[10px] text-gray-500 font-normal">
-                                      {formatSafeValue(t.executionTimeMs)}ms
+                                  <div className="flex items-center gap-1.5 truncate max-w-[75%]">
+                                    {t.status === "running" ? (
+                                      <CustomSpinner size="sm" />
+                                    ) : (
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                    )}
+                                    <span className="font-bold text-[#27272A] truncate">
+                                      {t.toolName}
                                     </span>
                                   </div>
-                                  {t.argumentsJson && (
-                                    <div className="text-[11px] font-mono text-gray-700 bg-gray-50 p-1 rounded">
-                                      {formatFriendlyJson(t.argumentsJson)}
-                                    </div>
-                                  )}
-                                  {t.outputJson && (
-                                    <div className="text-[11px] font-mono text-gray-700 bg-gray-50 p-1 rounded">
-                                      {formatFriendlyJson(t.outputJson)}
-                                    </div>
-                                  )}
+                                  <span className="text-gray-500 font-bold shrink-0">
+                                    {t.status === "running"
+                                      ? "Executing..."
+                                      : `${t.executionTimeMs}ms`}
+                                  </span>
                                 </div>
                               ))}
                             </div>
                           )}
                         </div>
                       ) : (
-                        /* Only after final text stream starts: non-expandable 'Thought for Xs' */
-                        <div className="flex items-center gap-1.5 text-xs text-[#52525B] font-semibold py-1 px-2">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                          <span>Thought for {durationSec}s</span>
+                        /* Clean summary once all tool execution completes */
+                        <div className="rounded-md bg-[#FAF6F0] border border-[#27272A]/30 px-3 py-1.5 flex items-center justify-between text-[11px] font-mono text-[#27272A]">
+                          <div className="flex items-center gap-1.5">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                            <span className="font-bold">
+                              Executed {activeToolEvents.length} market analysis tool{activeToolEvents.length > 1 ? "s" : ""} ({maxTimeMs}ms)
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setIsTimelineOpen(!isTimelineOpen)}
+                            className="font-bold text-[#2563EB] hover:underline flex items-center gap-1"
+                          >
+                            <span>{isTimelineOpen ? "Hide" : "Details"}</span>
+                            <ChevronDown
+                              className={`h-3 w-3 transition-transform duration-200 ${
+                                isTimelineOpen ? "rotate-180" : ""
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Tool Detail Output Drawer */}
+                      {!isThinkingToolsActive && isTimelineOpen && (
+                        <div className="mt-1.5 p-2.5 bg-white border border-[#27272A] rounded-md space-y-2 text-[11px] font-mono max-h-60 overflow-y-auto shadow-sm">
+                          {activeToolEvents.map((t) => (
+                            <div key={t.id} className="border-b border-gray-200 pb-2 last:border-0 last:pb-0">
+                              <div className="flex justify-between font-bold text-[#27272A] mb-1">
+                                <span>🔧 {t.toolName}</span>
+                                <span className="text-gray-400">{t.executionTimeMs}ms</span>
+                              </div>
+                              {t.argumentsJson && (
+                                <div className="text-gray-600 truncate mb-1">
+                                  Args: {t.argumentsJson}
+                                </div>
+                              )}
+                              {t.outputJson && (
+                                <div className="bg-[#FAF6F0] p-1.5 rounded text-gray-800 overflow-x-auto max-h-24">
+                                  {t.outputJson.slice(0, 300)}
+                                  {t.outputJson.length > 300 ? "..." : ""}
+                                </div>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
                   )}
 
-                {(formattedContent ||
-                  (isGenerating && m.sender === "agent")) && (
-                  <div
-                    className={`relative p-4 rounded-lg text-xs md:text-sm leading-relaxed ${
-                      m.sender === "user"
-                        ? "bg-[#2563EB] text-white border-2 border-[#27272A] shadow-[2.5px_2.5px_0px_#27272A] font-semibold whitespace-pre-wrap"
-                        : "bg-white text-[#27272A] border-2 border-[#27272A] shadow-[2.5px_2.5px_0px_#27272A] w-full"
-                    }`}
-                  >
-                    {m.sender === "user" ? (
-                      formattedContent
-                    ) : formattedContent ? (
-                      <MarkdownRenderer content={formattedContent} />
-                    ) : (
-                      "Analyzing market data..."
-                    )}
-
-                    {/* Action Toolbar: Copy (User & Agent) & Branch Out (Agent only) - Vertical Stack */}
-                    <div
-                      className={`opacity-0 group-hover:opacity-100 transition-opacity absolute flex flex-col gap-1.5 top-2 ${m.sender === "user" ? "-left-8" : "-right-8"}`}
-                    >
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleCopyMessage(m.id, m.content)}
-                        title="Copy text"
-                        className="h-6 w-6 text-gray-700 hover:text-black hover:bg-amber-200/90 rounded bg-white border border-[#27272A] shadow-[1px_1px_0px_#27272A]"
-                      >
-                        {copiedMsgId === m.id ? (
-                          <Check className="h-3 w-3 text-emerald-600 stroke-[3]" />
-                        ) : (
-                          <Copy className="h-3 w-3" />
-                        )}
-                      </Button>
-
-                      {m.sender === "agent" && activeConversationId && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleBranchChat(m.id)}
-                          title="Branch out new chat from here"
-                          className="h-6 w-6 text-gray-700 hover:text-black hover:bg-amber-200/90 rounded bg-white border border-[#27272A] shadow-[1px_1px_0px_#27272A]"
-                        >
-                          <GitBranch className="h-3 w-3 text-[#2563EB]" />
-                        </Button>
-                      )}
+                {/* Main Message Text Card */}
+                <div
+                  className={`relative group rounded-xl p-4 border-2 border-[#27272A] ${
+                    m.sender === "user"
+                      ? "bg-[#2563EB] text-white font-medium shadow-[2.5px_2.5px_0px_#27272A]"
+                      : "bg-white text-[#27272A] shadow-[3px_3px_0px_#27272A]"
+                  }`}
+                >
+                  {m.sender === "user" ? (
+                    <div className="whitespace-pre-wrap leading-relaxed text-xs md:text-sm font-medium">
+                      {m.content}
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <MarkdownRenderer content={formattedContent} />
+                  )}
+                </div>
 
                 {/* HRP Portfolio Allocation Table */}
                 {m.hrp_table?.symbols && (
@@ -772,7 +910,24 @@ function ChatPage() {
                     )}
                   </div>
                 )}
+
+                {/* Render Chart Artifacts when message metadata contains priceChart, growthChart, analystChart, or fiiDiiChart */}
+                <ChartArtifacts
+                  priceChart={m.priceChart}
+                  growthChart={m.growthChart}
+                  analystChart={m.analystChart}
+                  fiiDiiChart={m.fiiDiiChart}
+                />
               </div>
+
+              {/* Agent Message Action Buttons (Sticky Right Side: 4 vertical stacked buttons) */}
+              {m.sender === "agent" && (
+                <MessageActionBar
+                  message={m}
+                  conversationId={activeConversationId}
+                  onBranch={handleBranchChat}
+                />
+              )}
 
               {m.sender === "user" && (
                 <div className="h-8 w-8 rounded bg-[#F3ECE1] border-2 border-[#27272A] shadow-[1.5px_1.5px_0px_#27272A] flex items-center justify-center text-[#27272A] shrink-0 mt-1">
@@ -782,6 +937,7 @@ function ChatPage() {
             </div>
           )
         })}
+
 
         <div className="h-20" />
         <div ref={messagesEndRef} />
@@ -806,23 +962,36 @@ function ChatPage() {
         />
 
         <div className="flex items-center justify-between border-t border-[#27272A] pt-2">
-          {/* Left: Model Selector inside Floating Chatbox */}
+          {/* Left: Model Selector & Research Mode Dropdown grouped together */}
           <div className="flex items-center gap-2">
+            {/* Model Selector */}
             <Select
               value={selectedModel}
               onValueChange={handleModelChange}
               disabled={isRateLimited}
             >
-              <SelectTrigger className="h-8 text-[11px] font-bold bg-[#FAF6F0] border border-[#27272A] text-[#27272A] shadow-[1px_1px_0px_#27272A] w-[240px]">
-                <SelectValue placeholder="Select Model" />
+              <SelectTrigger className="h-8 text-[11px] font-bold bg-[#FAF6F0] border border-[#27272A] text-[#27272A] shadow-[1px_1px_0px_#27272A] w-[170px]">
+                <SelectValue>
+                  {selectedModel === "claude-haiku-4-5-20251001" && "Claude 4.5 Haiku"}
+                  {selectedModel === "gemini-3.5-flash-lite" && "Gemini 3.5 Flash Lite"}
+                  {selectedModel === "gemini-3.5-flash" && "Gemini 3.5 Flash"}
+                  {selectedModel === "gemini-2.5-pro" && "Gemini 2.5 Pro"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent className="bg-white border-2 border-[#27272A]">
+                <SelectItem
+                  value="claude-haiku-4-5-20251001"
+                  className="text-xs font-semibold"
+                >
+                  Claude 4.5 Haiku (1/day)
+                </SelectItem>
                 <SelectItem
                   value="gemini-3.5-flash-lite"
                   className="text-xs font-semibold"
                 >
                   Gemini 3.5 Flash Lite (Standard - 10/day)
                 </SelectItem>
+
                 <SelectItem
                   value="gemini-3.5-flash"
                   className="text-xs font-semibold"
@@ -835,26 +1004,33 @@ function ChatPage() {
                 >
                   Gemini 2.5 Pro (Pro - 1/day)
                 </SelectItem>
-                <SelectItem
-                  value="gpt-5.6-luna"
-                  className="text-xs font-semibold"
-                >
-                  OpenAI GPT-5.6 Luna (Research - 1/day)
+              </SelectContent>
+
+            </Select>
+
+            {/* Research Mode Dropdown */}
+            <Select
+              value={isResearchMode ? "enabled" : "disabled"}
+              onValueChange={(val) => setIsResearchMode(val === "enabled")}
+              disabled={isRateLimited}
+            >
+              <SelectTrigger className="h-8 text-[11px] font-bold bg-[#FAF6F0] border border-[#27272A] text-[#27272A] shadow-[1px_1px_0px_#27272A] w-[130px]">
+                <SelectValue>
+                  {isResearchMode ? "Research Mode" : "Research Off"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent className="bg-white border-2 border-[#27272A]">
+                <SelectItem value="disabled" className="text-xs font-semibold">
+                  Research Off
+                </SelectItem>
+                <SelectItem value="enabled" className="text-xs font-semibold">
+                  Research Mode
                 </SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {/* Research Mode Toggle */}
-          <label className="flex items-center gap-2 px-2 py-1 rounded text-xs font-semibold cursor-pointer hover:bg-[#F0F0F0] transition">
-            <input
-              type="checkbox"
-              checked={isResearchMode}
-              onChange={(e) => setIsResearchMode(e.target.checked)}
-              className="w-4 h-4 accent-[#2563EB]"
-            />
-            <span>Research Mode</span>
-          </label>
+
 
           {/* Right: Action Buttons */}
           <div className="flex items-center gap-2">

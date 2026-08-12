@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { authFetch } from "@/lib/authFetch"
 
 export const Route = createFileRoute("/_layout/watchlists")({
   component: WatchlistsPage,
@@ -62,14 +63,12 @@ function WatchlistsPage() {
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [selectedStock, setSelectedStock] = useState<any | null>(null)
 
-  const token = localStorage.getItem("access_token")
 
   // React Query cached watchlists fetch - instant tab switch SPA
   const { data: watchlists = [] } = useQuery<WatchlistData[]>({
     queryKey: ["watchlists"],
     queryFn: async () => {
-      const res = await fetch(`${OpenAPI.BASE}/api/v1/watchlists`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await authFetch(`/watchlists`, {
       })
       if (!res.ok) return []
       return await res.json()
@@ -93,7 +92,7 @@ function WatchlistsPage() {
     queryKey: ["watchlist_stock_quotes", symbolsKey],
     enabled: itemSymbols.length > 0,
     queryFn: async () => {
-      const res = await fetch(`${OpenAPI.BASE}/api/v1/utils/stock-quotes`, {
+      const res = await authFetch(`/utils/stock-quotes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ symbols: itemSymbols }),
@@ -132,11 +131,10 @@ function WatchlistsPage() {
     if (!newWatchlistName.trim()) return
     setErrorMessage(null)
     try {
-      const res = await fetch(`${OpenAPI.BASE}/api/v1/watchlists`, {
+      const res = await authFetch(`/watchlists`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ name: newWatchlistName.trim() }),
       })
@@ -166,7 +164,6 @@ function WatchlistsPage() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ symbol: selectedStock.symbol }),
         },
@@ -193,7 +190,6 @@ function WatchlistsPage() {
         `${OpenAPI.BASE}/api/v1/watchlists/${selectedWatchlistId}/items/${itemId}`,
         {
           method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
         },
       )
       if (res.ok) {
@@ -210,7 +206,6 @@ function WatchlistsPage() {
         `${OpenAPI.BASE}/api/v1/watchlists/${watchlistId}`,
         {
           method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
         },
       )
       if (res.ok) {

@@ -1,10 +1,13 @@
+import { useSignIn } from "@clerk/react/legacy"
 import { zodResolver } from "@hookform/resolvers/zod"
 import {
   createFileRoute,
   Link as RouterLink,
-  redirect,
+  useNavigate,
 } from "@tanstack/react-router"
+import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
+import { toast } from "sonner"
 import { z } from "zod"
 
 import type { Body_login_login_access_token as AccessToken } from "@/client"
@@ -20,7 +23,33 @@ import {
 import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { PasswordInput } from "@/components/ui/password-input"
-import useAuth, { isLoggedIn } from "@/hooks/useAuth"
+import useAuth from "@/hooks/useAuth"
+
+/**
+ * Actionable messages for incomplete sign-in statuses.
+ *
+ * `needs_identifier`/`needs_first_factor` mean the credentials were rejected;
+ * the rest signal Clerk instance settings (device trust, MFA, password reset)
+ * that would each need their own UI step.
+ */
+const SIGN_IN_STEP_MESSAGES: Record<string, string> = {
+  needs_identifier: "Incorrect email or password.",
+  needs_first_factor: "Incorrect email or password.",
+  needs_client_trust:
+    "This device needs verification. Disable password device trust in Clerk, or sign in with Google.",
+  needs_second_factor: "Two-factor authentication is required for this account.",
+  needs_new_password: "Your password must be reset before signing in.",
+}
+
+/** Pull the human-readable message out of a Clerk API error. */
+export function clerkErrorMessage(err: unknown, fallback: string): string {
+  const errors = (err as { errors?: { longMessage?: string; message?: string }[] })
+    ?.errors
+  if (errors?.length) {
+    return errors[0].longMessage || errors[0].message || fallback
+  }
+  return err instanceof Error ? err.message : fallback
+}
 
 const formSchema = z.object({
   username: z.email({ message: "Invalid email address" }),
@@ -32,15 +61,11 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>
 
+// Redirect-away-when-signed-in is handled in the component via Clerk's real
+// state; a cookie check here can be stale after sign-out and would trap the
+// user in a /login <-> /chat loop.
 export const Route = createFileRoute("/login")({
   component: Login,
-  beforeLoad: async () => {
-    if (isLoggedIn()) {
-      throw redirect({
-        to: "/chat",
-      })
-    }
-  },
 
   head: () => ({
     meta: [
@@ -52,7 +77,18 @@ export const Route = createFileRoute("/login")({
 })
 
 function Login() {
-  const { loginMutation } = useAuth()
+  const navigate = useNavigate()
+  const { isLoaded: authLoaded, isSignedIn } = useAuth()
+  const { isLoaded, signIn, setActive } = useSignIn()
+  const [loading, setLoading] = useState(false)
+
+  // Already signed in -> leave. Based on Clerk's real state, not a cookie.
+  useEffect(() => {
+    if (authLoaded && isSignedIn) {
+      navigate({ to: "/chat", replace: true })
+    }
+  }, [authLoaded, isSignedIn, navigate])
+
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     mode: "onBlur",
@@ -63,9 +99,34 @@ function Login() {
     },
   })
 
-  const onSubmit = (data: FormData) => {
-    if (loginMutation.isPending) return
-    loginMutation.mutate(data)
+  const onSubmit = async (data: FormData) => {
+    if (loading || !isLoaded || !signIn) return
+    setLoading(true)
+    try {
+      // Clerk is the only identity provider. Errors must propagate: silently
+      // continuing to /chat without a session produced an endless 401 loop.
+      const result = await signIn.create({
+        identifier: data.username,
+        password: data.password,
+      })
+
+      if (result.status !== "complete") {
+        // Password sign-in completes in one step for this instance (device
+        // trust is disabled). Anything else means the Clerk instance config
+        // changed and needs a matching UI step built here.
+        toast.error(SIGN_IN_STEP_MESSAGES[result.status ?? ""] ?? `Sign-in needs an extra step (${result.status}).`)
+        return
+      }
+
+      await setActive({ session: result.createdSessionId })
+      toast.success("Successfully logged in!")
+      // Full reload so the Clerk token bridge initializes with the new session.
+      window.location.href = "/chat"
+    } catch (err: unknown) {
+      toast.error(clerkErrorMessage(err, "Failed to log in"))
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -125,7 +186,7 @@ function Login() {
               )}
             />
 
-            <LoadingButton type="submit" loading={loginMutation.isPending}>
+            <LoadingButton type="submit" loading={loading}>
               Log In
             </LoadingButton>
           </div>

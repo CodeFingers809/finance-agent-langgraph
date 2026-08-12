@@ -52,5 +52,48 @@ message StreamEvent {
     bool is_finished = 8;
     ResearchStageUpdate research_stage_update = 9;
     ResearchReportFinal research_report_final = 10;
+    PriceChartResult price_chart = 11;
+    QuarterlyGrowthResult growth_chart = 12;
+    AnalystTargetResult analyst_chart = 13;
+    FiiDiiFlowResult fii_dii_chart = 14;
   }
 }
+
+message PriceChartPoint {
+  string date = 1;
+  double open = 2;
+  double high = 3;
+  double low = 4;
+  double close = 5;
+  int64 volume = 6;
+}
+
+message PriceChartResult {
+  string symbol = 1;
+  repeated PriceChartPoint points = 2;
+  string period = 3;
+}
+
+message QuarterlyGrowthResult {
+  string symbol = 1;
+  repeated string quarters = 2;
+  repeated double revenue = 3;
+  repeated double net_income = 4;
+  repeated double yoy_growth_pct = 5;
+  repeated double qoq_growth_pct = 6;
+}
+
+message AnalystTargetResult {
+  string symbol = 1;
+  repeated string dates = 2;
+  repeated double target_prices = 3;
+  repeated string firms = 4;
+  double current_price = 5;
+}
+
+message FiiDiiFlowResult {
+  repeated string dates = 1;
+  repeated double fii_net_cr = 2;
+  repeated double dii_net_cr = 3;
+}
+

@@ -3,9 +3,13 @@ import {
   createFileRoute,
   Link as RouterLink,
   redirect,
+  useNavigate,
 } from "@tanstack/react-router"
+import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
+import { useSignUp } from "@clerk/react/legacy"
+import { toast } from "sonner"
 import { AuthLayout } from "@/components/Common/AuthLayout"
 import {
   Form,
@@ -18,7 +22,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { PasswordInput } from "@/components/ui/password-input"
-import useAuth, { isLoggedIn } from "@/hooks/useAuth"
+import { isLoggedIn } from "@/hooks/useAuth"
 
 const formSchema = z
   .object({
@@ -58,7 +62,10 @@ export const Route = createFileRoute("/signup")({
 })
 
 function SignUp() {
-  const { signUpMutation } = useAuth()
+  const { isLoaded, signUp, setActive } = useSignUp()
+  const navigate = useNavigate()
+  const [loading, setLoading] = useState(false)
+
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     mode: "onBlur",
@@ -71,12 +78,33 @@ function SignUp() {
     },
   })
 
-  const onSubmit = (data: FormData) => {
-    if (signUpMutation.isPending) return
+  const onSubmit = async (data: FormData) => {
+    if (!isLoaded || loading) return
+    setLoading(true)
+    try {
+      const result = await signUp.create({
+        emailAddress: data.email,
+        password: data.password,
+      })
 
-    // exclude confirm_password from submission data
-    const { confirm_password: _confirm_password, ...submitData } = data
-    signUpMutation.mutate(submitData)
+      if (result.status === "complete") {
+        await setActive({ session: result.createdSessionId })
+        toast.success("Account created successfully!")
+        navigate({ to: "/chat" })
+      } else {
+        toast.info("Account created. Please verify your email or sign in.")
+        navigate({ to: "/login" })
+      }
+    } catch (err: any) {
+      const msg =
+        err?.errors?.[0]?.longMessage ||
+        err?.errors?.[0]?.message ||
+        err?.message ||
+        "Sign up failed. Please try again."
+      toast.error(msg)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -168,7 +196,7 @@ function SignUp() {
             <LoadingButton
               type="submit"
               className="w-full"
-              loading={signUpMutation.isPending}
+              loading={loading}
             >
               Sign Up
             </LoadingButton>

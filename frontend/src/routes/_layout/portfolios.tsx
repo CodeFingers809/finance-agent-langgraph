@@ -26,6 +26,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import useCustomToast from "@/hooks/useCustomToast"
+import { authFetch } from "@/lib/authFetch"
 
 export const Route = createFileRoute("/_layout/portfolios")({
   component: PortfoliosPage,
@@ -84,14 +85,12 @@ function PortfoliosPage() {
   const [editQuantity, setEditQuantity] = useState("")
   const [editBuyPrice, setEditBuyPrice] = useState("")
 
-  const token = localStorage.getItem("access_token")
 
   // React Query cached portfolio fetch - instant tab switch SPA
   const { data: portfolio = null } = useQuery<Portfolio | null>({
     queryKey: ["portfolio"],
     queryFn: async () => {
-      const res = await fetch(`${OpenAPI.BASE}/api/v1/portfolios`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await authFetch(`/portfolios`, {
       })
       if (!res.ok) return null
       const data: Portfolio[] = await res.json()
@@ -108,7 +107,6 @@ function PortfoliosPage() {
       const res = await fetch(
         `${OpenAPI.BASE}/api/v1/portfolios/${portfolio!.id}/metrics`,
         {
-          headers: { Authorization: `Bearer ${token}` },
         },
       )
       if (!res.ok) return null
@@ -125,7 +123,7 @@ function PortfoliosPage() {
     queryKey: ["stock_quotes", symbolsKey],
     enabled: itemSymbols.length > 0,
     queryFn: async () => {
-      const res = await fetch(`${OpenAPI.BASE}/api/v1/utils/stock-quotes`, {
+      const res = await authFetch(`/utils/stock-quotes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ symbols: itemSymbols }),
@@ -178,7 +176,6 @@ function PortfoliosPage() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
             symbol: selectedStock.symbol,
@@ -225,7 +222,6 @@ function PortfoliosPage() {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
             symbol: editingItem.symbol,
@@ -257,7 +253,6 @@ function PortfoliosPage() {
         `${OpenAPI.BASE}/api/v1/portfolios/${portfolio.id}/items/${itemId}`,
         {
           method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
         },
       )
       if (res.ok) {

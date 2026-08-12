@@ -15,11 +15,14 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as RecoverPasswordRouteImport } from './routes/recover-password'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as SsoCallbackRouteImport } from './routes/sso-callback'
 import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
 import { Route as LayoutChatRouteImport } from './routes/_layout/chat'
 import { Route as LayoutDashboardRouteImport } from './routes/_layout/dashboard'
 import { Route as LayoutItemsRouteImport } from './routes/_layout/items'
+import { Route as LayoutOrganizationRouteImport } from './routes/_layout/organization'
 import { Route as LayoutPortfoliosRouteImport } from './routes/_layout/portfolios'
+import { Route as LayoutResearchReportsRouteImport } from './routes/_layout/research-reports'
 import { Route as LayoutSettingsRouteImport } from './routes/_layout/settings'
 import { Route as LayoutWatchlistsRouteImport } from './routes/_layout/watchlists'
 
@@ -52,6 +55,11 @@ const SignupRoute = SignupRouteImport.update({
   path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SsoCallbackRoute = SsoCallbackRouteImport.update({
+  id: '/sso-callback',
+  path: '/sso-callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LayoutAdminRoute = LayoutAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -72,9 +80,19 @@ const LayoutItemsRoute = LayoutItemsRouteImport.update({
   path: '/items',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutOrganizationRoute = LayoutOrganizationRouteImport.update({
+  id: '/organization',
+  path: '/organization',
+  getParentRoute: () => LayoutRoute,
+} as any)
 const LayoutPortfoliosRoute = LayoutPortfoliosRouteImport.update({
   id: '/portfolios',
   path: '/portfolios',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutResearchReportsRoute = LayoutResearchReportsRouteImport.update({
+  id: '/research-reports',
+  path: '/research-reports',
   getParentRoute: () => LayoutRoute,
 } as any)
 const LayoutSettingsRoute = LayoutSettingsRouteImport.update({
@@ -94,11 +112,14 @@ export interface FileRoutesByFullPath {
   '/recover-password': typeof RecoverPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/sso-callback': typeof SsoCallbackRoute
   '/admin': typeof LayoutAdminRoute
   '/chat': typeof LayoutChatRoute
   '/dashboard': typeof LayoutDashboardRoute
   '/items': typeof LayoutItemsRoute
+  '/organization': typeof LayoutOrganizationRoute
   '/portfolios': typeof LayoutPortfoliosRoute
+  '/research-reports': typeof LayoutResearchReportsRoute
   '/settings': typeof LayoutSettingsRoute
   '/watchlists': typeof LayoutWatchlistsRoute
 }
@@ -108,11 +129,14 @@ export interface FileRoutesByTo {
   '/recover-password': typeof RecoverPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/sso-callback': typeof SsoCallbackRoute
   '/admin': typeof LayoutAdminRoute
   '/chat': typeof LayoutChatRoute
   '/dashboard': typeof LayoutDashboardRoute
   '/items': typeof LayoutItemsRoute
+  '/organization': typeof LayoutOrganizationRoute
   '/portfolios': typeof LayoutPortfoliosRoute
+  '/research-reports': typeof LayoutResearchReportsRoute
   '/settings': typeof LayoutSettingsRoute
   '/watchlists': typeof LayoutWatchlistsRoute
 }
@@ -124,11 +148,14 @@ export interface FileRoutesById {
   '/recover-password': typeof RecoverPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/sso-callback': typeof SsoCallbackRoute
   '/_layout/admin': typeof LayoutAdminRoute
   '/_layout/chat': typeof LayoutChatRoute
   '/_layout/dashboard': typeof LayoutDashboardRoute
   '/_layout/items': typeof LayoutItemsRoute
+  '/_layout/organization': typeof LayoutOrganizationRoute
   '/_layout/portfolios': typeof LayoutPortfoliosRoute
+  '/_layout/research-reports': typeof LayoutResearchReportsRoute
   '/_layout/settings': typeof LayoutSettingsRoute
   '/_layout/watchlists': typeof LayoutWatchlistsRoute
 }
@@ -140,11 +167,14 @@ export interface FileRouteTypes {
     | '/recover-password'
     | '/reset-password'
     | '/signup'
+    | '/sso-callback'
     | '/admin'
     | '/chat'
     | '/dashboard'
     | '/items'
+    | '/organization'
     | '/portfolios'
+    | '/research-reports'
     | '/settings'
     | '/watchlists'
   fileRoutesByTo: FileRoutesByTo
@@ -154,11 +184,14 @@ export interface FileRouteTypes {
     | '/recover-password'
     | '/reset-password'
     | '/signup'
+    | '/sso-callback'
     | '/admin'
     | '/chat'
     | '/dashboard'
     | '/items'
+    | '/organization'
     | '/portfolios'
+    | '/research-reports'
     | '/settings'
     | '/watchlists'
   id:
@@ -169,11 +202,14 @@ export interface FileRouteTypes {
     | '/recover-password'
     | '/reset-password'
     | '/signup'
+    | '/sso-callback'
     | '/_layout/admin'
     | '/_layout/chat'
     | '/_layout/dashboard'
     | '/_layout/items'
+    | '/_layout/organization'
     | '/_layout/portfolios'
+    | '/_layout/research-reports'
     | '/_layout/settings'
     | '/_layout/watchlists'
   fileRoutesById: FileRoutesById
@@ -185,6 +221,7 @@ export interface RootRouteChildren {
   RecoverPasswordRoute: typeof RecoverPasswordRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
+  SsoCallbackRoute: typeof SsoCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -231,6 +268,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sso-callback': {
+      id: '/sso-callback'
+      path: '/sso-callback'
+      fullPath: '/sso-callback'
+      preLoaderRoute: typeof SsoCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_layout/admin': {
       id: '/_layout/admin'
       path: '/admin'
@@ -259,11 +303,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutItemsRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/organization': {
+      id: '/_layout/organization'
+      path: '/organization'
+      fullPath: '/organization'
+      preLoaderRoute: typeof LayoutOrganizationRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/portfolios': {
       id: '/_layout/portfolios'
       path: '/portfolios'
       fullPath: '/portfolios'
       preLoaderRoute: typeof LayoutPortfoliosRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/research-reports': {
+      id: '/_layout/research-reports'
+      path: '/research-reports'
+      fullPath: '/research-reports'
+      preLoaderRoute: typeof LayoutResearchReportsRouteImport
       parentRoute: typeof LayoutRoute
     }
     '/_layout/settings': {
@@ -288,7 +346,9 @@ interface LayoutRouteChildren {
   LayoutChatRoute: typeof LayoutChatRoute
   LayoutDashboardRoute: typeof LayoutDashboardRoute
   LayoutItemsRoute: typeof LayoutItemsRoute
+  LayoutOrganizationRoute: typeof LayoutOrganizationRoute
   LayoutPortfoliosRoute: typeof LayoutPortfoliosRoute
+  LayoutResearchReportsRoute: typeof LayoutResearchReportsRoute
   LayoutSettingsRoute: typeof LayoutSettingsRoute
   LayoutWatchlistsRoute: typeof LayoutWatchlistsRoute
 }
@@ -298,7 +358,9 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutChatRoute: LayoutChatRoute,
   LayoutDashboardRoute: LayoutDashboardRoute,
   LayoutItemsRoute: LayoutItemsRoute,
+  LayoutOrganizationRoute: LayoutOrganizationRoute,
   LayoutPortfoliosRoute: LayoutPortfoliosRoute,
+  LayoutResearchReportsRoute: LayoutResearchReportsRoute,
   LayoutSettingsRoute: LayoutSettingsRoute,
   LayoutWatchlistsRoute: LayoutWatchlistsRoute,
 }
@@ -313,6 +375,7 @@ const rootRouteChildren: RootRouteChildren = {
   RecoverPasswordRoute: RecoverPasswordRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
+  SsoCallbackRoute: SsoCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

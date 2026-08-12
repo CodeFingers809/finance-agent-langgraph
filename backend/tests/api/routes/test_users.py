@@ -94,14 +94,7 @@ def test_get_existing_user_current_user(client: TestClient, db: Session) -> None
     user = crud.create_user(session=db, user_create=user_in)
     user_id = user.id
 
-    login_data = {
-        "username": username,
-        "password": password,
-    }
-    r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
-    tokens = r.json()
-    a_token = tokens["access_token"]
-    headers = {"Authorization": f"Bearer {a_token}"}
+    headers = {"Authorization": f"Bearer {username}"}
 
     r = client.get(
         f"{settings.API_V1_STR}/users/{user_id}",
@@ -424,14 +417,7 @@ def test_delete_user_me(client: TestClient, db: Session) -> None:
     user = crud.create_user(session=db, user_create=user_in)
     user_id = user.id
 
-    login_data = {
-        "username": username,
-        "password": password,
-    }
-    r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
-    tokens = r.json()
-    a_token = tokens["access_token"]
-    headers = {"Authorization": f"Bearer {a_token}"}
+    headers = {"Authorization": f"Bearer {username}"}
 
     r = client.delete(
         f"{settings.API_V1_STR}/users/me",

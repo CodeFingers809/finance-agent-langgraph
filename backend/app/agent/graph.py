@@ -43,17 +43,20 @@ def get_agent_executor(model_name: str = "gemini-3.5-flash-lite"):
     """
     lower = model_name.lower()
 
-    if "gpt-5.6-luna" in lower or "gpt-5" in lower or "openai" in lower:
-        api_key = settings.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY")
+    if "haiku" in lower or "claude" in lower or "anthropic" in lower:
+        api_key = settings.ANTHROPIC_API_KEY or os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
             api_key = "demo_placeholder_key"
-        
-        llm = ChatOpenAI(
-            model="gpt-5.6-luna",
-            api_key=api_key,
-            temperature=0.2,
+        from langchain_anthropic import ChatAnthropic
+        from pydantic import SecretStr
+        llm = ChatAnthropic(
+            model="claude-haiku-4-5-20251001",
+            api_key=SecretStr(api_key),
+            temperature=0.1,
             streaming=True,
         )
+
+
     else:
         api_key = settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")
         if not api_key:
@@ -157,6 +160,59 @@ async def stream_agent_events(
                             "symbols": parsed.get("symbols", []),
                             "weights": [float(w) for w in parsed.get("weights", [])],
                             "summary_notes": parsed.get("notes", ""),
+                        }
+                    except Exception:
+                        pass
+                elif tool_name == "get_price_history_chart_data":
+                    try:
+                        import json
+                        parsed = json.loads(output_str)
+                        yield {
+                            "type": "price_chart",
+                            "symbol": parsed.get("symbol", ""),
+                            "points": parsed.get("points", []),
+                            "period": parsed.get("period", ""),
+                        }
+                    except Exception:
+                        pass
+                elif tool_name == "get_quarterly_growth_chart_data":
+                    try:
+                        import json
+                        parsed = json.loads(output_str)
+                        yield {
+                            "type": "growth_chart",
+                            "symbol": parsed.get("symbol", ""),
+                            "quarters": parsed.get("quarters", []),
+                            "revenue": [float(v) for v in parsed.get("revenue", [])],
+                            "net_income": [float(v) for v in parsed.get("net_income", [])],
+                            "yoy_growth_pct": [float(v) for v in parsed.get("yoy_growth_pct", [])],
+                            "qoq_growth_pct": [float(v) for v in parsed.get("qoq_growth_pct", [])],
+                        }
+                    except Exception:
+                        pass
+                elif tool_name == "get_analyst_target_chart_data":
+                    try:
+                        import json
+                        parsed = json.loads(output_str)
+                        yield {
+                            "type": "analyst_chart",
+                            "symbol": parsed.get("symbol", ""),
+                            "dates": parsed.get("dates", []),
+                            "target_prices": [float(v) for v in parsed.get("target_prices", [])],
+                            "firms": parsed.get("firms", []),
+                            "current_price": float(parsed.get("current_price", 0.0)),
+                        }
+                    except Exception:
+                        pass
+                elif tool_name == "get_fii_dii_flows":
+                    try:
+                        import json
+                        parsed = json.loads(output_str)
+                        yield {
+                            "type": "fii_dii_chart",
+                            "dates": parsed.get("dates", []),
+                            "fii_net_cr": [float(v) for v in parsed.get("fii_net_cr", [])],
+                            "dii_net_cr": [float(v) for v in parsed.get("dii_net_cr", [])],
                         }
                     except Exception:
                         pass

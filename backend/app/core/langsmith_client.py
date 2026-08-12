@@ -16,7 +16,7 @@ Integration points:
 import hashlib
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any
 
@@ -132,9 +132,8 @@ async def get_langsmith_stats() -> dict[str, Any]:
             api_url=settings.LANGSMITH_ENDPOINT,  # LangSmith Client uses api_url not endpoint
         )
 
-        # Fetch last 100 runs from project (free tier safe)
-        # Filter to recent 7 days to minimize data transfer
-        cutoff_date = datetime.utcnow() - timedelta(days=7)
+        # Filter to recent 7 days to minimize data transfer safely with UTC aware datetimes
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=7)
         runs = list(
             client.list_runs(
                 project_name=settings.LANGSMITH_PROJECT,
@@ -143,12 +142,18 @@ async def get_langsmith_stats() -> dict[str, Any]:
             )
         )
 
-        # Filter to last 7 days
+        def _to_utc(dt: datetime) -> datetime:
+            if dt.tzinfo is None:
+                return dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+
+        # Filter to last 7 days safely
         recent_runs = [
             r
             for r in runs
-            if r.start_time and r.start_time > cutoff_date
+            if r.start_time and _to_utc(r.start_time) > cutoff_date
         ]
+
 
         if not recent_runs:
             default_stats = {
@@ -183,20 +188,64 @@ async def get_langsmith_stats() -> dict[str, Any]:
             if run.error:
                 error_count += 1
 
-            # Token usage (if available in outputs)
-            if run.outputs:
-                outputs = run.outputs if isinstance(run.outputs, dict) else {}
-                if isinstance(outputs.get("token_usage"), dict):
-                    token_usage = outputs["token_usage"]
-                    total_tokens_input += token_usage.get("prompt_tokens", 0)
-                    total_tokens_output += token_usage.get("completion_tokens", 0)
+            # Token usage extraction across all possible LangSmith trace locations
+            in_tokens = getattr(run, "prompt_tokens", None)
+            out_tokens = getattr(run, "completion_tokens", None)
 
-            # Tool & model extraction from run metadata
+            extra = getattr(run, "extra", {}) or {}
+            outputs = getattr(run, "outputs", {}) or {}
+
+            if in_tokens is None and isinstance(extra, dict):
+                meta = extra.get("metadata", {}) or {}
+                tu = extra.get("token_usage", {}) or meta.get("token_usage", {}) or meta.get("usage", {})
+                if isinstance(tu, dict):
+                    in_tokens = tu.get("prompt_tokens") or tu.get("input_tokens")
+                    out_tokens = tu.get("completion_tokens") or tu.get("output_tokens")
+
+            if in_tokens is None and isinstance(outputs, dict):
+                llm_out = outputs.get("llm_output", {}) or outputs.get("usage", {}) or outputs.get("token_usage", {})
+                if isinstance(llm_out, dict):
+                    in_tokens = llm_out.get("prompt_tokens") or llm_out.get("input_tokens") or llm_out.get("prompt_token_count")
+                    out_tokens = llm_out.get("completion_tokens") or llm_out.get("output_tokens") or llm_out.get("candidates_token_count")
+
+            total_tokens_input += int(in_tokens or 0)
+            total_tokens_output += int(out_tokens or 0)
+
+            # Model extraction across metadata, invocation_params, tags, and serialized kwargs
+            model_name = None
+            if isinstance(extra, dict):
+                meta = extra.get("metadata", {}) or {}
+                inv = extra.get("invocation_params", {}) or {}
+                model_name = (
+                    meta.get("ls_model_name")
+                    or meta.get("model_name")
+                    or meta.get("model")
+                    or inv.get("model_name")
+                    or inv.get("model")
+                )
+
+            if not model_name and hasattr(run, "serialized") and isinstance(run.serialized, dict):
+                kwargs = run.serialized.get("kwargs", {}) or {}
+                model_name = kwargs.get("model") or run.serialized.get("name")
+
+            if not model_name and hasattr(run, "tags") and run.tags:
+                for tag in run.tags:
+                    if any(m in tag.lower() for m in ["gpt", "gemini", "claude", "haiku", "pro", "flash"]):
+                        model_name = tag
+                        break
+
+            if not model_name and getattr(run, "run_type", "") == "llm":
+                model_name = run.name
+
+            if model_name:
+                clean_model = str(model_name)
+                model_counts[clean_model] = model_counts.get(clean_model, 0) + 1
+
+            # Tool extraction
             if run.name:
-                # Tool: if run.name contains known tool name
-                if any(
-                    tool in run.name.lower()
-                    for tool in [
+                if getattr(run, "run_type", "") == "tool" or any(
+                    t in run.name.lower()
+                    for t in [
                         "calculate",
                         "search",
                         "stock",
@@ -204,15 +253,12 @@ async def get_langsmith_stats() -> dict[str, Any]:
                         "watchlist",
                         "news",
                         "technical",
+                        "screen",
+                        "hrp",
                     ]
                 ):
                     tool_counts[run.name] = tool_counts.get(run.name, 0) + 1
 
-            # Model: extract from run tags or metadata
-            if hasattr(run, "tags") and run.tags:
-                for tag in run.tags:
-                    if "gpt-" in tag or "gemini-" in tag:
-                        model_counts[tag] = model_counts.get(tag, 0) + 1
 
         # Calculate averages
         avg_latency_ms = total_latency_ms / total_runs if total_runs > 0 else 0.0

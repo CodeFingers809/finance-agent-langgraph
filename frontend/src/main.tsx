@@ -1,3 +1,4 @@
+import { ClerkProvider, useAuth } from "@clerk/react"
 import {
   MutationCache,
   QueryCache,
@@ -5,7 +6,7 @@ import {
   QueryClientProvider,
 } from "@tanstack/react-query"
 import { createRouter, RouterProvider } from "@tanstack/react-router"
-import { StrictMode } from "react"
+import { StrictMode, useEffect } from "react"
 import ReactDOM from "react-dom/client"
 import { ApiError, OpenAPI } from "./client"
 import { ThemeProvider } from "./components/theme-provider"
@@ -13,17 +14,23 @@ import { Toaster } from "./components/ui/sonner"
 import "./index.css"
 import { routeTree } from "./routeTree.gen"
 
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || ""
+
 OpenAPI.BASE = import.meta.env.VITE_API_URL ?? ""
-OpenAPI.TOKEN = async () => {
-  return localStorage.getItem("access_token") || ""
-}
+// Clerk owns the session; ClerkTokenBridge (below) installs the real getToken
+// once the provider mounts. Until then there is no token to send.
+OpenAPI.TOKEN = async () => ""
 
 const handleApiError = (error: Error) => {
-  if (error instanceof ApiError && [401, 403].includes(error.status)) {
-    localStorage.removeItem("access_token")
-    window.location.href = "/login"
+  // 403/404 are legitimate authorization/not-found answers under RBAC -- only a
+  // 401 means the session itself is invalid, and Clerk handles that redirect.
+  if (error instanceof ApiError && error.status === 401) {
+    if (window.location.pathname !== "/login") {
+      window.location.href = "/login"
+    }
   }
 }
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -40,6 +47,28 @@ const queryClient = new QueryClient({
   }),
 })
 
+/**
+ * Feeds Clerk's session token to the generated API client.
+ *
+ * The client is a module-level singleton created outside React, so the token
+ * getter has to be installed from inside the provider where useAuth() works.
+ * getToken() returns a cached token and refreshes it as needed.
+ */
+function ClerkTokenBridge({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
+  const { getToken, isLoaded } = useAuth()
+
+  useEffect(() => {
+    OpenAPI.TOKEN = async () => (await getToken()) ?? ""
+  }, [getToken])
+
+  // Block rendering until Clerk resolves, otherwise the first queries fire
+  // unauthenticated and 401.
+  if (!isLoaded) return null
+  return <>{children}</>
+}
+
 const router = createRouter({ routeTree })
 declare module "@tanstack/react-router" {
   interface Register {
@@ -49,11 +78,15 @@ declare module "@tanstack/react-router" {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-        <Toaster richColors closeButton />
-      </QueryClientProvider>
-    </ThemeProvider>
+    <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
+      <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+        <QueryClientProvider client={queryClient}>
+          <ClerkTokenBridge>
+            <RouterProvider router={router} />
+          </ClerkTokenBridge>
+          <Toaster richColors closeButton />
+        </QueryClientProvider>
+      </ThemeProvider>
+    </ClerkProvider>
   </StrictMode>,
 )

@@ -29,17 +29,8 @@ function cleanMarkdownContent(rawText: string): string {
   // Replace escaped newlines
   text = text.replace(/\\n/g, "\n")
   
-  // Fix LaTeX compatibility for KaTeX:
-  // 1. Escape rupee symbol (₹) with \text{} to use text font
-  text = text.replace(/₹/g, "\\text{₹}")
-  
-  // 2. Fix division overlaps by replacing / with proper fractions
-  // Convert "a / b" patterns in math mode to use \frac or \dfrac
-  // Look for patterns like: number / number or symbol / number
-  text = text.replace(/\$([^$]*\/[^$]*)\$/g, (_match, content) => {
-    const fixed = content.replace(/\s*([^\s]+)\s*\/\s*([^\s]+)\s*/g, "\\dfrac{$1}{$2}")
-    return `$${fixed}$`
-  })
+  // Clean up legacy doubled LaTeX text wrappers
+  text = text.replace(/\\text\{\\text\{₹\}\}/g, "₹").replace(/\\text\{₹\}/g, "₹")
   
   return text
 }
@@ -52,7 +43,7 @@ export function MarkdownRenderer({
 
   return (
     <div
-      className={`markdown-content space-y-2 leading-relaxed text-xs md:text-sm text-[#27272A] ${className}`}
+      className={`markdown-content space-y-2 leading-relaxed text-xs md:text-sm text-[#27272A] max-w-full overflow-hidden ${className}`}
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
@@ -74,7 +65,7 @@ export function MarkdownRenderer({
             </h3>
           ),
           p: ({ children }) => (
-            <p className="my-1.5 leading-relaxed">{children}</p>
+            <p className="my-1.5 leading-relaxed break-words">{children}</p>
           ),
           ul: ({ children }) => (
             <ul className="list-disc list-inside space-y-1 my-2 pl-1">
@@ -102,14 +93,31 @@ export function MarkdownRenderer({
               {children}
             </blockquote>
           ),
-          code: ({ children }) => (
-            <code className="font-mono text-[11px] bg-[#F3ECE1] border border-[#27272A]/30 px-1.5 py-0.5 rounded text-[#27272A]">
-              {children}
-            </code>
+          pre: ({ children }) => (
+            <div className="my-3 overflow-x-auto max-w-full rounded-lg bg-[#27272A] p-3 text-white border-2 border-[#27272A] shadow-[2.5px_2.5px_0px_#27272A]">
+              <pre className="font-mono text-xs overflow-x-auto whitespace-pre max-w-full">
+                {children}
+              </pre>
+            </div>
           ),
+          code: ({ node, className, children, ...props }: any) => {
+            const isInline = !className && !node?.position?.start?.line
+            if (isInline) {
+              return (
+                <code className="font-mono text-[11px] bg-[#F3ECE1] border border-[#27272A]/30 px-1.5 py-0.5 rounded text-[#27272A] break-all">
+                  {children}
+                </code>
+              )
+            }
+            return (
+              <code className="font-mono text-xs whitespace-pre" {...props}>
+                {children}
+              </code>
+            )
+          },
 
           table: ({ children }) => (
-            <div className="overflow-x-auto my-3 border-2 border-[#27272A] rounded-lg shadow-[2px_2px_0px_#27272A]">
+            <div className="overflow-x-auto max-w-full my-3 border-2 border-[#27272A] rounded-lg shadow-[2px_2px_0px_#27272A]">
               <table className="min-w-full divide-y-2 divide-[#27272A] bg-white text-xs">
                 {children}
               </table>
@@ -143,3 +151,4 @@ export function MarkdownRenderer({
     </div>
   )
 }
+

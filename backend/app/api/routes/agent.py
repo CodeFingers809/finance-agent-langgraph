@@ -4,14 +4,15 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse, Response
+from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.agent.graph import stream_agent_events
+from app.agent.rag.retrieve import current_org_id
 from app.agent.research_graph import stream_agent_events_research
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import CurrentAuth, CurrentUser, SessionDep
 from app.core.db import engine
 from app.core.quota import check_and_update_quota, get_user_quota_status
 from app.models import (
@@ -20,10 +21,14 @@ from app.models import (
     Conversation,
     ConversationPublic,
     QuotaStatusPublic,
-    User,
 )
 from app.proto.financial_agent_pb2 import (
+    AnalystTargetResult,
+    FiiDiiFlowResult,
     HRPOptimizationResult,
+    PriceChartPoint,
+    PriceChartResult,
+    QuarterlyGrowthResult,
     StreamEvent,
     TextChunk,
     ToolCallEnd,
@@ -31,6 +36,7 @@ from app.proto.financial_agent_pb2 import (
 )
 
 router = APIRouter(prefix="/agent", tags=["agent"])
+
 
 
 class ChatRequestPayload(BaseModel):
@@ -197,10 +203,14 @@ async def options_chat_stream():
 async def chat_stream(
     payload: ChatRequestPayload,
     session: SessionDep,
-    current_user: CurrentUser,
+    auth: CurrentAuth,
 ):
+    current_user = auth.user
     # 1. Enforce Quota & Rate Limit
     check_and_update_quota(session, current_user.id, payload.model_name)
+
+    # Scope the RAG tool to the caller's org for this request.
+    current_org_id.set(auth.org_id)
 
     # 2. Retrieve or create conversation
     conv = None
@@ -208,8 +218,11 @@ async def chat_stream(
         try:
             conv_id = uuid.UUID(payload.conversation_id)
             conv = session.get(Conversation, conv_id)
-        except Exception:
+        except ValueError:
             conv = None
+        # Never stream into someone else's conversation.
+        if conv and conv.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Conversation not found")
 
     if not conv:
         title = payload.message[:30] + ("..." if len(payload.message) > 30 else "")
@@ -307,6 +320,60 @@ async def chat_stream(
                 b64_data = base64.b64encode(pb_event.SerializeToString()).decode("utf-8")
                 yield f"event: tool_event\ndata: {b64_data}\n\n"
 
+            elif evt_type == "price_chart":
+                tool_events_log.append(evt)
+                pts = [PriceChartPoint(**p) for p in evt.get("points", [])]
+                pb_event.price_chart.CopyFrom(
+                    PriceChartResult(
+                        symbol=evt.get("symbol", ""),
+                        points=pts,
+                        period=evt.get("period", ""),
+                    )
+                )
+                b64_data = base64.b64encode(pb_event.SerializeToString()).decode("utf-8")
+                yield f"event: tool_event\ndata: {b64_data}\n\n"
+
+            elif evt_type == "growth_chart":
+                tool_events_log.append(evt)
+                pb_event.growth_chart.CopyFrom(
+                    QuarterlyGrowthResult(
+                        symbol=evt.get("symbol", ""),
+                        quarters=evt.get("quarters", []),
+                        revenue=evt.get("revenue", []),
+                        net_income=evt.get("net_income", []),
+                        yoy_growth_pct=evt.get("yoy_growth_pct", []),
+                        qoq_growth_pct=evt.get("qoq_growth_pct", []),
+                    )
+                )
+                b64_data = base64.b64encode(pb_event.SerializeToString()).decode("utf-8")
+                yield f"event: tool_event\ndata: {b64_data}\n\n"
+
+            elif evt_type == "analyst_chart":
+                tool_events_log.append(evt)
+                pb_event.analyst_chart.CopyFrom(
+                    AnalystTargetResult(
+                        symbol=evt.get("symbol", ""),
+                        dates=evt.get("dates", []),
+                        target_prices=evt.get("target_prices", []),
+                        firms=evt.get("firms", []),
+                        current_price=evt.get("current_price", 0.0),
+                    )
+                )
+                b64_data = base64.b64encode(pb_event.SerializeToString()).decode("utf-8")
+                yield f"event: tool_event\ndata: {b64_data}\n\n"
+
+            elif evt_type == "fii_dii_chart":
+                tool_events_log.append(evt)
+                pb_event.fii_dii_chart.CopyFrom(
+                    FiiDiiFlowResult(
+                        dates=evt.get("dates", []),
+                        fii_net_cr=evt.get("fii_net_cr", []),
+                        dii_net_cr=evt.get("dii_net_cr", []),
+                    )
+                )
+                b64_data = base64.b64encode(pb_event.SerializeToString()).decode("utf-8")
+                yield f"event: tool_event\ndata: {b64_data}\n\n"
+
             elif evt_type == "error_message":
                 pb_event.error_message = evt.get("error", "Unknown error")
                 b64_data = base64.b64encode(pb_event.SerializeToString()).decode("utf-8")
@@ -355,7 +422,9 @@ async def chat_stream(
 class ResearchRequestPayload(BaseModel):
     """Request payload for research mode (4-analyst synthesis)."""
     query: str
-    model_name: str = "gpt-5.6-luna"
+    model_name: str = "claude-haiku-4-5-20251001"
+    conversation_id: str | None = None
+
 
 
 @router.options("/research/stream")
@@ -371,28 +440,45 @@ async def options_research_stream():
 async def research_stream(
     payload: ResearchRequestPayload,
     session: SessionDep,
-    current_user: CurrentUser,
+    auth: CurrentAuth,
 ):
     """
     Research mode endpoint: runs 4 analyst personas in sequence, then synthesizes.
-    
+
     Yields SSE events:
     - research_stage_update: analyst stage change (short_term, long_term, high_risk, low_risk, synthesize)
     - text_chunk: final synthesis text streaming
     - is_finished: completion marker
-    
+
     Returns StreamingResponse with text/event-stream media type.
     """
+    current_user = auth.user
     # Enforce quota
     check_and_update_quota(session, current_user.id, payload.model_name)
 
-    # Create or retrieve research conversation (optional, for future multi-turn research)
-    title = f"Research: {payload.query[:40]}..."
-    research_conv = Conversation(user_id=current_user.id, title=title)
-    session.add(research_conv)
-    session.commit()
-    session.refresh(research_conv)
-    conv_id = research_conv.id
+    # Scope the RAG tool to the caller's org for this request.
+    current_org_id.set(auth.org_id)
+
+    # Retrieve existing or create new research conversation
+    conv = None
+    if payload.conversation_id:
+        try:
+            c_id = uuid.UUID(payload.conversation_id)
+            conv = session.get(Conversation, c_id)
+        except ValueError:
+            conv = None
+        # Never stream into someone else's conversation.
+        if conv and conv.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+
+    if not conv:
+        title = f"Research: {payload.query[:30]}..."
+        conv = Conversation(user_id=current_user.id, title=title)
+        session.add(conv)
+        session.commit()
+        session.refresh(conv)
+
+    conv_id = conv.id
 
     # Save research query
     query_msg = ChatMessage(
@@ -402,6 +488,7 @@ async def research_stream(
     )
     session.add(query_msg)
     session.commit()
+
 
     accumulated_synthesis = []
 
@@ -429,15 +516,15 @@ async def research_stream(
             evt_type = evt.get("type")
 
             if evt_type == "research_stage_update":
-                # Analyst stage transition (informational only)
                 stage = evt.get("stage", "")
                 status = evt.get("status", "")
-                # Encode as text chunk for now (can extend proto if needed)
+                detail = evt.get("detail", "")
                 pb_event.text_chunk.CopyFrom(
-                    TextChunk(text=f"[RESEARCH_STAGE:{stage}:{status}]")
+                    TextChunk(text=f"[RESEARCH_STAGE:{stage}:{status}:{detail}]")
                 )
                 b64_data = base64.b64encode(pb_event.SerializeToString()).decode("utf-8")
                 yield f"event: text_stream\ndata: {b64_data}\n\n"
+
 
             elif evt_type == "text_chunk":
                 # Final synthesis streaming

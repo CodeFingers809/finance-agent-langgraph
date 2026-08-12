@@ -4,7 +4,7 @@ import sqlalchemy as sa
 from sqlalchemy.sql import text
 
 revision = "001_add_research_mode"
-down_revision = "fe56fa70289e"
+down_revision = "000_add_app_tables"
 branch_labels = None
 depends_on = None
 
@@ -14,8 +14,11 @@ def upgrade() -> None:
 
     op.create_table(
         "researchreport",
-        sa.Column("id", sa.String(), nullable=False),
-        sa.Column("user_id", sa.String(), nullable=False),
+        # sa.Uuid(), not sa.String(): user.id is a UUID as of d98dd8ec85a3, and
+        # Postgres rejects a varchar -> uuid foreign key outright. The original
+        # String() typing only ever worked because SQLite ignores FK types.
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("user_id", sa.Uuid(), nullable=False),
         sa.Column("symbol", sa.String(length=50), nullable=False),
         sa.Column("query", sa.String(length=1000), nullable=False),
         sa.Column("markdown_report", sa.String(length=50000), nullable=False),

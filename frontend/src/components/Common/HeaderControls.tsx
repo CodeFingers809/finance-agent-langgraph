@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { OpenAPI } from "@/client"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { authFetch } from "@/lib/authFetch"
 
 interface SearchStockResult {
   symbol: string
@@ -29,11 +30,8 @@ export function HeaderControls() {
 
   const fetchQuota = useCallback(async () => {
     try {
-      const token = localStorage.getItem("access_token")
-      if (!token) return
-      const res = await fetch(`${OpenAPI.BASE}/api/v1/agent/quota`, {
+      const res = await authFetch(`/agent/quota`, {
         headers: {
-          Authorization: `Bearer ${token}`,
         },
       })
       if (res.ok) {

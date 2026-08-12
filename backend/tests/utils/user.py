@@ -10,13 +10,10 @@ from tests.utils.utils import random_email, random_lower_string
 def user_authentication_headers(
     *, client: TestClient, email: str, password: str
 ) -> dict[str, str]:
-    data = {"username": email, "password": password}
-
-    r = client.post(f"{settings.API_V1_STR}/login/access-token", data=data)
-    response = r.json()
-    auth_token = response["access_token"]
-    headers = {"Authorization": f"Bearer {auth_token}"}
-    return headers
+    # Clerk owns real auth; the test get_auth override resolves this header to a
+    # local user by email (see tests/conftest.py). password is unused, kept so
+    # existing call sites don't change.
+    return {"Authorization": f"Bearer {email}"}
 
 
 def create_random_user(db: Session) -> User:

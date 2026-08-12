@@ -1,5 +1,7 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router"
 import {
+  Bookmark,
+  Building2,
   Check,
   Eye,
   MessageSquare,
@@ -27,6 +29,7 @@ import {
 } from "@/components/ui/sidebar"
 import useAuth from "@/hooks/useAuth"
 import { User } from "./User"
+import { authFetch } from "@/lib/authFetch"
 
 interface ConversationItem {
   id: string
@@ -46,10 +49,7 @@ export function AppSidebar() {
 
   const fetchConversations = useCallback(async () => {
     try {
-      const token = localStorage.getItem("access_token")
-      if (!token) return
-      const res = await fetch(`${OpenAPI.BASE}/api/v1/agent/conversations`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await authFetch(`/agent/conversations`, {
       })
       if (res.ok) {
         const data: ConversationItem[] = await res.json()
@@ -86,15 +86,12 @@ export function AppSidebar() {
     if (!editTitleInput.trim()) return
 
     try {
-      const token = localStorage.getItem("access_token")
-      if (!token) return
       const res = await fetch(
         `${OpenAPI.BASE}/api/v1/agent/conversations/${convId}`,
         {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ title: editTitleInput.trim() }),
         },
@@ -112,11 +109,8 @@ export function AppSidebar() {
     e.preventDefault()
     e.stopPropagation()
     try {
-      const token = localStorage.getItem("access_token")
-      if (!token) return
-      await fetch(`${OpenAPI.BASE}/api/v1/agent/conversations/${id}`, {
+      await authFetch(`/agent/conversations/${id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
       })
       fetchConversations()
       const currentConvId = (location.search as any)?.convId
@@ -259,6 +253,36 @@ export function AppSidebar() {
                   >
                     <Eye className="h-4 w-4 text-amber-600" />
                     <span>Watchlists</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.pathname === "/research-reports"}
+                >
+                  <Link
+                    to="/research-reports"
+                    className="flex items-center gap-2.5 text-xs font-bold text-[#27272A] p-2 hover:bg-amber-100 rounded transition-colors"
+                  >
+                    <Bookmark className="h-4 w-4 text-amber-700" />
+                    <span>Saved Reports</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.pathname === "/organization"}
+                >
+                  <Link
+                    to="/organization"
+                    className="flex items-center gap-2.5 text-xs font-bold text-[#27272A] p-2 hover:bg-amber-100 rounded transition-colors"
+                  >
+                    <Building2 className="h-4 w-4 text-emerald-600" />
+                    <span>Organization Settings</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

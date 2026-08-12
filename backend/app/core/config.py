@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Finance Agent"
     GEMINI_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
+    ANTHROPIC_API_KEY: str = ""
+
 
     LANGSMITH_API_KEY: str = ""
     LANGSMITH_PROJECT: str = ""
@@ -67,6 +69,16 @@ class Settings(BaseSettings):
     LANGCHAIN_TRACING_V2: str = "false"
 
     SENTRY_DSN: HttpUrl | None = None
+
+    # Clerk owns authentication, organizations, and roles. The backend verifies
+    # session tokens and mirrors users/orgs locally via webhooks.
+    CLERK_SECRET_KEY: str = ""
+    CLERK_PUBLISHABLE_KEY: str = ""
+    CLERK_WEBHOOK_SECRET: str = ""
+
+    # Backs per-user daily rate limiting (see app/core/redis_client.py). Reused
+    # from the existing Redis install/container -- never containerized fresh.
+    REDIS_URL: str = "redis://localhost:6379/0"
     DATABASE_URL: str | None = None
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_PORT: int = 5432
