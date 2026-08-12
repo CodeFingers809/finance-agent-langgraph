@@ -1,12 +1,54 @@
+import React from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeKatex from "rehype-katex"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
 import "katex/dist/katex.min.css"
+import { visit } from "unist-util-visit"
 
 interface MarkdownRendererProps {
   content: string
   className?: string
+}
+
+/** Rehype plugin to wrap block math ($$...$$) in a scrollable container. */
+function rehypeWrapBlockMath() {
+  return (tree: any) => {
+    visit(tree, "element", (node: any) => {
+      if (node.tagName === "div" && node.properties?.className?.includes("katex-display")) {
+        node.properties.className = [...(node.properties.className || []), "katex-block-wrapper"]
+        node.properties.style = {
+          ...node.properties.style,
+          overflowX: "auto",
+          overflowY: "hidden",
+          maxWidth: "100%",
+          padding: "0.5rem",
+          margin: "0.5rem 0",
+        }
+      }
+    })
+  }
+}
+
+/** Rehype plugin to add line-height to inline math for proper spacing without overlapping lines. */
+function rehypeInlineMathLineHeight() {
+  return (tree: any) => {
+    visit(tree, "element", (node: any) => {
+      if (
+        node.tagName === "span" &&
+        node.properties?.className?.includes("katex") &&
+        !node.properties.className?.includes("katex-display")
+      ) {
+        node.properties.style = {
+          ...node.properties.style,
+          lineHeight: "2.4",
+          display: "inline-block",
+          verticalAlign: "middle",
+          padding: "0.15rem 0.25rem",
+        }
+      }
+    })
+  }
 }
 
 function cleanMarkdownContent(rawText: string): string {
@@ -16,23 +58,80 @@ function cleanMarkdownContent(rawText: string): string {
 
   // Unescape raw python dict/list string representations if present
   if (text.includes("[{'type':") || text.includes('[{"type":')) {
-    try {
-      const matches = [...text.matchAll(/['"]text['"]:\s*['"](.*?)['"]/g)]
-      if (matches.length > 0) {
-        text = matches.map((m) => m[1]).join("")
-      }
-    } catch (_e) {
-      // Fallback
+    const parts: string[] = []
+    const re = /['"]text['"]:\s*'((?:[^'\\]|\\.)*)'/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(text)) !== null) {
+      parts.push(m[1].replace(/\\'/g, "'"))
+    }
+    if (parts.length > 0) {
+      text = parts.reduce((acc, part) => {
+        if (!acc) return part
+        if (/\w$/.test(acc) && /^\w/.test(part)) return acc + " " + part
+        return acc + part
+      }, "")
     }
   }
 
+
   // Replace escaped newlines
   text = text.replace(/\\n/g, "\n")
-  
+
   // Clean up legacy doubled LaTeX text wrappers
   text = text.replace(/\\text\{\\text\{₹\}\}/g, "₹").replace(/\\text\{₹\}/g, "₹")
-  
+
+  // Fix bare % inside math mode to prevent TeX comment syntax breaking math mode
+  text = text.replace(/\$\$([\s\S]*?)\$\$|\$([^$\n]+?)\$/g, (match) =>
+    match.replace(/(?<!\\)%/g, "\\%")
+  )
+
   return text
+}
+
+/** Helper to parse <br> / <br/> / <br /> tags inside table cell children and render them as actual line breaks. */
+function renderCellWithBr(node: React.ReactNode): React.ReactNode {
+  if (typeof node === "string") {
+    if (/<br\s*\/?>/i.test(node)) {
+      const parts = node.split(/<br\s*\/?>/gi)
+      return parts.map((part, idx) => (
+        <React.Fragment key={idx}>
+          {idx > 0 && <br />}
+          {part}
+        </React.Fragment>
+      ))
+    }
+    return node
+  }
+  if (Array.isArray(node)) {
+    return node.map((child, idx) => (
+      <React.Fragment key={idx}>{renderCellWithBr(child)}</React.Fragment>
+    ))
+  }
+  if (React.isValidElement(node) && (node.props as any)?.children) {
+    return React.cloneElement(node, {
+      ...(node.props as any),
+      children: renderCellWithBr((node.props as any).children),
+    })
+  }
+  return node
+}
+
+/** Custom component to render table cells with <br> as line breaks within the cell. */
+function TableCell({ children, ...props }: React.TdHTMLAttributes<HTMLTableCellElement>) {
+  return (
+    <td className="px-3 py-2 text-[#27272A] font-medium whitespace-normal break-words align-top" {...props}>
+      <div className="leading-relaxed whitespace-pre-wrap">{renderCellWithBr(children)}</div>
+    </td>
+  )
+}
+
+/** Custom component for table header cells. */
+function TableHeaderCell({ children, ...props }: React.ThHTMLAttributes<HTMLTableHeaderCellElement>) {
+  return (
+    <th className="px-3 py-2 text-left font-extrabold text-[#27272A] align-top" {...props}>
+      <div className="leading-relaxed whitespace-pre-wrap">{renderCellWithBr(children)}</div>
+    </th>
+  )
 }
 
 export function MarkdownRenderer({
@@ -43,29 +142,33 @@ export function MarkdownRenderer({
 
   return (
     <div
-      className={`markdown-content space-y-2 leading-relaxed text-xs md:text-sm text-[#27272A] max-w-full overflow-hidden ${className}`}
+      className={`markdown-content space-y-3 leading-loose text-xs md:text-sm text-[#27272A] max-w-full overflow-hidden ${className}`}
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex]}
+        rehypePlugins={[
+          [rehypeKatex, { strict: false, throwOnError: false }],
+          rehypeWrapBlockMath,
+          rehypeInlineMathLineHeight,
+        ]}
         components={{
           h1: ({ children }) => (
-            <h1 className="font-display font-extrabold text-base md:text-lg border-b-2 border-[#27272A] pb-1 mt-3 mb-2 text-[#27272A]">
+            <h1 className="font-display font-extrabold text-base md:text-lg border-b-2 border-[#27272A] pb-1 mt-4 mb-2 text-[#27272A]">
               {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="font-display font-bold text-sm md:text-base border-b border-[#27272A]/30 pb-0.5 mt-3 mb-1.5 text-[#27272A]">
+            <h2 className="font-display font-bold text-sm md:text-base border-b border-[#27272A]/30 pb-0.5 mt-3.5 mb-1.5 text-[#27272A]">
               {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="font-display font-bold text-xs md:text-sm mt-2.5 mb-1 text-[#27272A]">
+            <h3 className="font-display font-bold text-xs md:text-sm mt-3 mb-1 text-[#27272A]">
               {children}
             </h3>
           ),
           p: ({ children }) => (
-            <p className="my-1.5 leading-relaxed break-words">{children}</p>
+            <p className="my-2 leading-loose break-words">{children}</p>
           ),
           ul: ({ children }) => (
             <ul className="list-disc list-inside space-y-1 my-2 pl-1">
@@ -136,14 +239,8 @@ export function MarkdownRenderer({
               {children}
             </tr>
           ),
-          th: ({ children }) => (
-            <th className="px-3 py-2 text-left font-extrabold text-[#27272A]">
-              {children}
-            </th>
-          ),
-          td: ({ children }) => (
-            <td className="px-3 py-2 text-[#27272A] font-medium">{children}</td>
-          ),
+          th: TableHeaderCell,
+          td: TableCell,
         }}
       >
         {cleanedText}
@@ -151,4 +248,3 @@ export function MarkdownRenderer({
     </div>
   )
 }
-

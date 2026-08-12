@@ -2,6 +2,10 @@ import html2canvas from "html2canvas"
 import jsPDF from "jspdf"
 import { createRoot } from "react-dom/client"
 
+import {
+  ChartArtifacts,
+  type ChartArtifactsProps,
+} from "@/components/Chat/ChartArtifacts"
 import { MarkdownRenderer } from "@/components/Common/MarkdownRenderer"
 
 /** Rendered width in CSS px. ~A4 content width at 96dpi, so text wraps like print. */
@@ -20,7 +24,7 @@ export async function exportElementToPdf(
   filename: string,
 ): Promise<void> {
   const canvas = await html2canvas(el, {
-    scale: 2,
+    scale: 3,
     useCORS: true,
     logging: false,
     backgroundColor: "#ffffff",
@@ -30,29 +34,109 @@ export async function exportElementToPdf(
     height: el.scrollHeight,
     windowWidth: RENDER_WIDTH,
     onclone: (_doc, clonedEl) => {
-      // The live element is positioned off-screen for capture; the clone must
-      // sit at the origin and be fully visible or content gets clipped.
       const node = clonedEl as HTMLElement
       node.style.position = "static"
+
       node.style.left = "0"
       node.style.top = "0"
       node.style.width = `${RENDER_WIDTH}px`
       node.style.overflow = "visible"
       node.style.maxHeight = "none"
-      // Tailwind v4 emits oklch(), which html2canvas cannot parse; anything
-      // still using it would render black.
+      node.style.backgroundColor = "#ffffff"
+      node.style.color = "#27272a"
+      node.style.fontFamily = "Arial, Helvetica, sans-serif"
+
+      // Tailwind v4 emits oklch() / oklab() — html2canvas cannot parse either.
+      // Replace modern color functions safely: text/borders -> #27272a, backgrounds -> transparent/white.
+      const MODERN_COLOR = /okl(?:ch|ab)\([^)]+\)/g
+
       for (const child of Array.from(node.querySelectorAll<HTMLElement>("*"))) {
         child.style.overflow = "visible"
         child.style.maxHeight = "none"
+        child.style.fontFamily = "Arial, Helvetica, sans-serif"
+
+        const tagName = child.tagName.toLowerCase()
+
+        // Ensure inline emphasis tags (strong, b, em, i, mark) have NO background boxes and maintain proper adjacent word spacing
+        if (tagName === "strong" || tagName === "mark" || tagName === "b" || tagName === "em" || tagName === "i") {
+          child.style.backgroundColor = "transparent"
+          child.style.border = "none"
+          child.style.padding = "0"
+          child.style.boxShadow = "none"
+          child.style.display = "inline"
+          child.style.marginRight = "0.2em"
+          if (tagName === "em" || tagName === "i") {
+            child.style.fontStyle = "italic"
+          } else {
+            child.style.fontWeight = "bold"
+          }
+          child.style.color = "#27272a"
+        }
+
+        if (tagName === "p" || tagName === "li" || tagName === "div" || tagName === "td" || tagName === "span") {
+          child.style.lineHeight = "1.8"
+          child.style.wordSpacing = "0.15em"
+          child.style.letterSpacing = "normal"
+        }
+
+        // Sanitize inline style
         const inline = child.getAttribute("style")
-        if (inline?.includes("oklch")) {
-          child.setAttribute(
-            "style",
-            inline.replace(/oklch\([^)]+\)/g, "#27272a"),
-          )
+        if (inline && MODERN_COLOR.test(inline)) {
+          child.setAttribute("style", inline.replace(MODERN_COLOR, "#27272a"))
+        }
+        MODERN_COLOR.lastIndex = 0
+
+        // Sanitize computed colors
+        const computed = getComputedStyle(child)
+        for (const prop of ["color", "borderColor", "outlineColor", "stroke"] as const) {
+          const val = computed[prop]
+          if (val && MODERN_COLOR.test(val)) {
+            child.style[prop] = "#27272a"
+            MODERN_COLOR.lastIndex = 0
+          }
+        }
+
+        const bgVal = computed.backgroundColor
+        if (bgVal && MODERN_COLOR.test(bgVal)) {
+          if (tagName === "strong" || tagName === "mark" || tagName === "b" || tagName === "em" || tagName === "i") {
+            child.style.backgroundColor = "transparent"
+          } else if (tagName === "thead" || tagName === "th") {
+            child.style.backgroundColor = "#fef3c7" // Soft amber table header
+          } else if (tagName === "blockquote") {
+            child.style.backgroundColor = "#fffbeb"
+          } else if (child.classList.contains("katex-block-wrapper") || child.classList.contains("katex-display")) {
+            child.style.backgroundColor = "#fafafa"
+          } else {
+            child.style.backgroundColor = "transparent"
+          }
+          MODERN_COLOR.lastIndex = 0
         }
       }
+
+
+
+      // Fix KaTeX rendering: ensure math elements wrap/scale cleanly in PDF without scrollbars
+      for (const katexEl of Array.from(node.querySelectorAll<HTMLElement>(".katex, .katex-display, .katex-block-wrapper"))) {
+        katexEl.style.overflow = "visible"
+        katexEl.style.maxHeight = "none"
+        katexEl.style.maxWidth = "100%"
+        katexEl.style.boxSizing = "border-box"
+
+        if (katexEl.classList.contains("katex-display") || katexEl.classList.contains("katex-block-wrapper")) {
+          katexEl.style.display = "block"
+          katexEl.style.overflowX = "visible"
+          katexEl.style.overflowY = "visible"
+          katexEl.style.fontSize = "95%"
+        }
+      }
+
+      // Fix table rendering: prevent tables from breaking ugly mid-row
+      for (const tableEl of Array.from(node.querySelectorAll<HTMLElement>("table, tr, td, th"))) {
+        tableEl.style.pageBreakInside = "avoid"
+        tableEl.style.breakInside = "avoid"
+      }
     },
+
   })
 
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
@@ -114,13 +198,14 @@ interface ExportReportOptions {
   createdAt?: string
   modelName?: string | null
   filename?: string
+  charts?: ChartArtifactsProps
 }
 
 /** Render a report to a styled, paginated PDF. */
 export async function exportFormattedReportPdf(
   options: ExportReportOptions,
 ): Promise<void> {
-  const { title, markdownReport, symbol, createdAt, modelName, filename } =
+  const { title, markdownReport, symbol, createdAt, modelName, filename, charts } =
     options
 
   const container = document.createElement("div")
@@ -131,8 +216,9 @@ export async function exportFormattedReportPdf(
   container.style.width = `${RENDER_WIDTH}px`
   container.style.backgroundColor = "#ffffff"
   container.style.color = "#27272A"
-  container.style.fontFamily = "system-ui, -apple-system, sans-serif"
+  container.style.fontFamily = "Arial, Helvetica, sans-serif"
   document.body.appendChild(container)
+
 
   const root = createRoot(container)
 
@@ -155,16 +241,29 @@ export async function exportFormattedReportPdf(
         </div>
       </header>
 
+      {/* Charts first — visual artifacts before the report text */}
+      {charts && (
+        <div className="mb-8">
+          <ChartArtifacts {...charts} />
+        </div>
+      )}
+
       <MarkdownRenderer content={markdownReport} />
     </div>,
   )
+
 
   try {
     // Wait for fonts, KaTeX, and layout before rasterizing -- capturing too
     // early yields a blank or half-styled page.
     await document.fonts?.ready
+    // Wait for KaTeX to render (it renders asynchronously)
     await new Promise((resolve) => requestAnimationFrame(resolve))
-    await new Promise((resolve) => setTimeout(resolve, 250))
+    await new Promise((resolve) => requestAnimationFrame(resolve))
+    // Give KaTeX more time to render complex formulas
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    // Additional wait for any remaining async rendering
+    await new Promise((resolve) => requestAnimationFrame(resolve))
 
     const target = (container.firstElementChild as HTMLElement) ?? container
     const safeSymbol = (symbol || "report").replace(/[^a-zA-Z0-9]/g, "")

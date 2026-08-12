@@ -1,6 +1,7 @@
 import json
 import logging
 import math
+from datetime import datetime, timedelta, UTC
 from typing import Any
 
 import numpy as np
@@ -10,6 +11,7 @@ from langchain_core.tools import tool
 from scipy.cluster.hierarchy import leaves_list, linkage
 
 try:
+    import sympy
     from sympy import sympify, latex as sympy_latex, factorial as sympy_factorial
     from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
 except ImportError:
@@ -19,6 +21,7 @@ try:
     from duckduckgo_search import DDGS
 except ImportError:
     DDGS = None
+
 
 logger = logging.getLogger(__name__)
 
@@ -651,7 +654,14 @@ def get_price_history_chart_data(symbol: str, period: str = "1mo") -> str:
                 "volume": int(row.get("Volume", 0)),
             })
 
+        payload = {
+            "symbol": norm_sym,
+            "points": points,
+            "period": period,
+        }
         return json.dumps({
+            "_chart_payload": payload,
+            "_llm_message": f"Interactive price history chart for {norm_sym} ({period}) has been generated and displayed in the UI artifact.",
             "symbol": norm_sym,
             "points": points,
             "period": period,
@@ -700,7 +710,17 @@ def get_quarterly_growth_chart_data(symbol: str) -> str:
                 yoy = round(((revenue[i] - revenue[i - 4]) / abs(revenue[i - 4]) * 100), 2)
                 yoy_growth[i] = yoy
 
+        payload = {
+            "symbol": norm_sym,
+            "quarters": quarters,
+            "revenue": revenue,
+            "net_income": net_income,
+            "yoy_growth_pct": yoy_growth,
+            "qoq_growth_pct": qoq_growth,
+        }
         return json.dumps({
+            "_chart_payload": payload,
+            "_llm_message": f"Interactive quarterly financial growth chart for {norm_sym} has been generated and displayed in the UI artifact.",
             "symbol": norm_sym,
             "quarters": quarters,
             "revenue": revenue,
@@ -726,19 +746,34 @@ def get_analyst_target_chart_data(symbol: str) -> str:
         target_prices = []
         firms = []
 
-        if targets_df is not None and not targets_df.empty:
+        if isinstance(targets_df, pd.DataFrame) and not targets_df.empty:
             for idx, row in targets_df.iterrows():
                 d_str = idx.strftime("%Y-%m-%d") if hasattr(idx, "strftime") else str(idx)[:10]
                 dates.append(d_str)
                 target_prices.append(round(float(row.get("target", row.get("mean", current_price))), 2))
                 firms.append(str(row.get("firm", "Analyst Consensus")))
+        elif isinstance(targets_df, dict) and targets_df:
+            current_target = targets_df.get("current") or targets_df.get("mean") or info.get("targetMeanPrice")
+            if current_target:
+                dates.append(datetime.now(UTC).strftime("%Y-%m-%d"))
+                target_prices.append(round(float(current_target), 2))
+                firms.append("Consensus Target")
 
         if not dates:
             dates = [datetime.now(UTC).strftime("%Y-%m-%d")]
             target_prices = [round(float(info.get("targetMeanPrice") or current_price * 1.1), 2)]
             firms = ["Consensus Target"]
 
+        payload = {
+            "symbol": norm_sym,
+            "dates": dates,
+            "target_prices": target_prices,
+            "firms": firms,
+            "current_price": round(current_price, 2),
+        }
         return json.dumps({
+            "_chart_payload": payload,
+            "_llm_message": f"Interactive analyst price target chart for {norm_sym} has been generated and displayed in the UI artifact.",
             "symbol": norm_sym,
             "dates": dates,
             "target_prices": target_prices,
@@ -766,13 +801,21 @@ def get_fii_dii_flows(days: int = 10) -> str:
                 fii_net.append(round(500.0 * math.sin(i) + 120.0, 2))
                 dii_net.append(round(350.0 * math.cos(i) + 210.0, 2))
 
+        payload = {
+            "dates": dates,
+            "fii_net_cr": fii_net,
+            "dii_net_cr": dii_net,
+        }
         return json.dumps({
+            "_chart_payload": payload,
+            "_llm_message": "Interactive FII & DII institutional money flow chart has been generated and displayed in the UI artifact.",
             "dates": dates,
             "fii_net_cr": fii_net,
             "dii_net_cr": dii_net,
         })
     except Exception as e:
         return json.dumps({"error": f"Failed to fetch FII/DII flow data: {str(e)}"})
+
 
 
 from app.agent.rag.retrieve import search_org_research_reports

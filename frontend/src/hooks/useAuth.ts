@@ -31,8 +31,10 @@ const useAuth = () => {
     queryKey: ["currentUser"],
     queryFn: UsersService.readUserMe,
     enabled: isLoaded && !!isSignedIn,
-    retry: false,
+    retry: 2,
+    retryDelay: 1000,
   })
+
 
   const logout = async () => {
     await signOut()

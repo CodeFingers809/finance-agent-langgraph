@@ -11,6 +11,8 @@ import useAuth from "@/hooks/useAuth"
 // bridge isn't installed yet and any API call from here 401s -- which used to
 // bounce to /login, whose own guard bounced back, looping forever. Auth is
 // gated in the component below, where Clerk's hooks are available.
+import { isLoggedIn } from "@/hooks/useAuth"
+
 export const Route = createFileRoute("/_layout")({
   component: Layout,
 })
@@ -24,7 +26,7 @@ function Layout() {
   })
 
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
+    if (isLoaded && !isSignedIn && !isLoggedIn()) {
       navigate({ to: "/login", replace: true })
     }
   }, [isLoaded, isSignedIn, navigate])
@@ -41,9 +43,9 @@ function Layout() {
     }
   }, [organization, userMemberships?.data, setActive])
 
-  // Render nothing until Clerk resolves, so children never fire
-  // unauthenticated requests.
-  if (!isLoaded || !isSignedIn) return null
+  // Render nothing until Clerk resolves or cookie hint is present
+  if (!isLoaded || (!isSignedIn && !isLoggedIn())) return null
+
 
   return (
     <SidebarProvider

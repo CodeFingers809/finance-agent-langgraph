@@ -87,7 +87,11 @@ function OrganizationPage() {
               Create or select an organization to share watchlists, portfolios,
               and research reports with your team.
             </p>
-            <OrganizationSwitcher hidePersonal={false} />
+            <OrganizationSwitcher
+              hidePersonal={false}
+              appearance={{ elements: { organizationSwitcherPopoverActionButton__createOrganization: { display: "none" } } }}
+            />
+
           </CardContent>
         </Card>
       </div>
@@ -108,7 +112,11 @@ function OrganizationPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <OrganizationSwitcher hidePersonal={false} />
+          <OrganizationSwitcher
+            hidePersonal={false}
+            appearance={{ elements: { organizationSwitcherPopoverActionButton__createOrganization: { display: "none" } } }}
+          />
+
           <Button
             variant="outline"
             size="sm"

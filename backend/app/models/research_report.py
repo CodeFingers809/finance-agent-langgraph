@@ -32,6 +32,8 @@ class ResearchReport(SQLModel, table=True):
         default=None, foreign_key="chatmessage.id", ondelete="SET NULL"
     )
     title: str | None = Field(default=None, max_length=500)
+    # JSON-encoded chart artifacts (price, growth, analyst, fii/dii) from the source message
+    chart_data: str | None = Field(default=None)
     created_at: datetime | None = Field(
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
@@ -48,8 +50,8 @@ class ResearchReportCreate(SQLModel):
     symbol: str = Field(default="", max_length=50)
     query: str = Field(default="", max_length=1000)
     title: str | None = Field(default=None, max_length=500)
-    # The model that actually produced the text, supplied by the client. Empty
-    # when unknown -- never substitute a placeholder name.
+    # JSON-encoded chart artifacts from the source message metadata
+    chart_data: str | None = Field(default=None)
     created_by_model: str = Field(default="", max_length=100)
     conversation_id: uuid.UUID | None = None
     message_id: uuid.UUID | None = None
@@ -63,6 +65,7 @@ class ResearchReportPublic(SQLModel):
     query: str
     markdown_report: str
     title: str | None
+    chart_data: str | None
     conversation_id: uuid.UUID | None
     message_id: uuid.UUID | None
     created_at: datetime | None
@@ -70,12 +73,21 @@ class ResearchReportPublic(SQLModel):
 
 
 class ResearchReportListItem(SQLModel):
-    """List view -- omits markdown_report so listing many reports stays cheap."""
+    """List view including markdown_report and chart_data for card previews and reader modal."""
 
     id: uuid.UUID
     user_id: uuid.UUID
     symbol: str
     query: str
     title: str | None
+    markdown_report: str
+    chart_data: str | None
     created_at: datetime | None
     created_by_model: str
+
+
+
+class ResearchReportUpdate(SQLModel):
+    """Payload for updating a research report (e.g., renaming)."""
+
+    title: str | None = Field(default=None, max_length=500)

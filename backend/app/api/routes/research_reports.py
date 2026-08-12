@@ -1,5 +1,5 @@
-import ast
 import logging
+import re
 import uuid
 from typing import Any
 
@@ -12,6 +12,7 @@ from app.models import (
     ResearchReportCreate,
     ResearchReportListItem,
     ResearchReportPublic,
+    ResearchReportUpdate,
 )
 
 logger = logging.getLogger(__name__)
@@ -23,22 +24,25 @@ def clean_llm_text(text: str | None) -> str:
 
     Anthropic responses stream as [{'type': 'text', 'text': ...}]; when that
     reaches the client as a string, saving it verbatim stores the repr.
+    Uses regex (not ast.literal_eval) to handle single quotes in content.
     """
     if not text:
         return ""
-    s = text.strip()
+    s = text
+
+    # Detect Python-dict-style content blocks: [{'type': 'text', 'text': '...'}]
     if s.startswith("[{'type':") or s.startswith('[{"type":'):
-        try:
-            parsed = ast.literal_eval(s)
-        except (ValueError, SyntaxError):
-            return s
-        if isinstance(parsed, list):
-            extracted = "".join(
-                item.get("text", "") for item in parsed if isinstance(item, dict)
-            )
-            if extracted:
-                return extracted.strip()
-    return s
+        parts: list[str] = []
+        # Capture everything between 'text': '...' including escaped quotes
+        pattern = re.compile(r"['\"]text['\"]\s*:\s*'((?:[^'\\]|\\.)*)'")
+        for m in pattern.finditer(s):
+            parts.append(m.group(1).replace("\\'", "'"))
+        if parts:
+            return "".join(parts)
+
+    # Also handle case where it's a raw string with \n escapes
+    return s.replace("\\n", "\n")
+
 
 
 def _require_org(auth: CurrentAuth) -> str:
@@ -87,10 +91,12 @@ async def create_research_report(
         markdown_report=markdown,
         symbol=report_in.symbol,
         query=report_in.query,
+        chart_data=report_in.chart_data,
         created_by_model=report_in.created_by_model,
         conversation_id=report_in.conversation_id,
         message_id=report_in.message_id,
     )
+
     session.add(report)
     session.commit()
     session.refresh(report)
@@ -137,3 +143,25 @@ async def delete_research_report(
     session.delete(report)
     session.commit()
     return {"status": "success", "message": "Research report deleted successfully"}
+
+
+@router.patch("/{report_id}", response_model=ResearchReportPublic)
+async def update_research_report(
+    report_id: uuid.UUID,
+    report_in: ResearchReportUpdate,
+    session: SessionDep,
+    auth: OrgAdmin,
+) -> ResearchReportPublic:
+    """Update a research report (e.g., rename)."""
+    org_id = _require_org(auth)
+    report = session.get(ResearchReport, report_id)
+    if not report or report.org_id != org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Research report not found"
+        )
+    if report_in.title is not None:
+        report.title = report_in.title
+    session.add(report)
+    session.commit()
+    session.refresh(report)
+    return ResearchReportPublic.model_validate(report)

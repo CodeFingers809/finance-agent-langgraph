@@ -158,8 +158,8 @@ function WatchlistsPage() {
     if (!selectedWatchlistId || !selectedStock) return
     setErrorMessage(null)
     try {
-      const res = await fetch(
-        `${OpenAPI.BASE}/api/v1/watchlists/${selectedWatchlistId}/items`,
+      const res = await authFetch(
+        `/watchlists/${selectedWatchlistId}/items`,
         {
           method: "POST",
           headers: {
@@ -186,8 +186,8 @@ function WatchlistsPage() {
   const handleDeleteItem = async (itemId: string) => {
     if (!selectedWatchlistId) return
     try {
-      const res = await fetch(
-        `${OpenAPI.BASE}/api/v1/watchlists/${selectedWatchlistId}/items/${itemId}`,
+      const res = await authFetch(
+        `/watchlists/${selectedWatchlistId}/items/${itemId}`,
         {
           method: "DELETE",
         },
@@ -202,8 +202,8 @@ function WatchlistsPage() {
 
   const handleDeleteWatchlist = async (watchlistId: string) => {
     try {
-      const res = await fetch(
-        `${OpenAPI.BASE}/api/v1/watchlists/${watchlistId}`,
+      const res = await authFetch(
+        `/watchlists/${watchlistId}`,
         {
           method: "DELETE",
         },
@@ -218,6 +218,7 @@ function WatchlistsPage() {
       console.error("Failed to delete watchlist", err)
     }
   }
+
 
   return (
     <div className="p-4 md:p-8 space-y-6 bg-[#FAF6F0] text-[#27272A] min-h-full">

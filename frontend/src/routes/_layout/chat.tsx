@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router"
 import {
+  ArrowDown,
   ArrowUp,
   BarChart3,
   Bot,
@@ -10,6 +11,7 @@ import {
   Square,
   User,
 } from "lucide-react"
+
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { OpenAPI } from "@/client"
@@ -131,6 +133,7 @@ function ChatPage() {
 
 
 
+  const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const isUserScrolledUpRef = useRef(false)
@@ -150,16 +153,26 @@ function ChatPage() {
   const handleScroll = useCallback(() => {
     const el = chatContainerRef.current
     if (!el) return
-    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
-    isUserScrolledUpRef.current = !isAtBottom
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+
+    // Re-engage auto-scroll lock if user scrolls back down near the bottom (<= 40px)
+    if (distanceToBottom <= 40) {
+      isUserScrolledUpRef.current = false
+      setShowScrollBottomBtn(false)
+    } else if (distanceToBottom > 80) {
+      // Break auto-scroll lock if user scrolls up (> 80px from bottom)
+      isUserScrolledUpRef.current = true
+      setShowScrollBottomBtn(true)
+    }
   }, [])
 
-  // Auto-scroll when messages update (e.g. streaming answer) if user hasn't scrolled up
+  // Auto-scroll when messages or tool execution events stream in, unless user manually scrolled up
   useEffect(() => {
     if (messages.length > 0 && !isUserScrolledUpRef.current) {
-      scrollToBottom(true)
+      scrollToBottom(false)
     }
-  }, [messages, scrollToBottom])
+  }, [messages, activeToolEvents, researchLogHistory, scrollToBottom])
+
 
   // Fetch quota status — only once on mount, then every 5 minutes (cached)
   const fetchQuotaStatus = useCallback(async () => {
@@ -186,31 +199,87 @@ function ChatPage() {
         const data = await res.json()
         setMessages(
           data.map((m: any) => {
-            let meta: any = {}
+            let priceChart: any = null
+            let growthChart: any = null
+            let analystChart: any = null
+            let fiiDiiChart: any = null
+            let hrp_table: any = null
+
             if (m.metadata_json) {
               try {
-                meta =
+                const meta: any =
                   typeof m.metadata_json === "string"
                     ? JSON.parse(m.metadata_json)
                     : m.metadata_json
+
+                if (Array.isArray(meta)) {
+                  // Stored as tool_events_log: [{type:"price_chart", ...}, ...]
+                  for (const evt of meta) {
+                    if (evt.type === "price_chart") {
+                      priceChart = {
+                        symbol: evt.symbol,
+                        points: evt.points,
+                        period: evt.period,
+                      }
+                    } else if (evt.type === "growth_chart") {
+                      growthChart = {
+                        symbol: evt.symbol,
+                        quarters: evt.quarters,
+                        revenue: evt.revenue,
+                        netIncome: evt.net_income,
+                        yoyGrowthPct: evt.yoy_growth_pct,
+                        qoqGrowthPct: evt.qoq_growth_pct,
+                      }
+                    } else if (evt.type === "analyst_chart") {
+                      analystChart = {
+                        symbol: evt.symbol,
+                        dates: evt.dates,
+                        targetPrices: evt.target_prices,
+                        firms: evt.firms,
+                        currentPrice: evt.current_price,
+                      }
+                    } else if (evt.type === "fii_dii_chart") {
+                      fiiDiiChart = {
+                        dates: evt.dates,
+                        fiiNetCr: evt.fii_net_cr,
+                        diiNetCr: evt.dii_net_cr,
+                      }
+                    } else if (evt.type === "hrp_result") {
+                      hrp_table = {
+                        symbols: evt.symbols,
+                        weights: evt.weights,
+                        summaryNotes: evt.summary_notes,
+                      }
+                    }
+                  }
+                } else {
+                  // Fallback: already shaped as camelCase object
+                  priceChart = meta?.priceChart
+                  growthChart = meta?.growthChart
+                  analystChart = meta?.analystChart
+                  fiiDiiChart = meta?.fiiDiiChart
+                  hrp_table = meta?.hrp_table
+                }
               } catch (_e) {
-                // ignore
+                // ignore parse errors
               }
             }
+
             return {
               id: m.id,
               sender: m.sender,
               content: m.content,
               metadata_json: m.metadata_json,
               created_at: m.created_at,
-              priceChart: meta?.priceChart || m.priceChart,
-              growthChart: meta?.growthChart || m.growthChart,
-              analystChart: meta?.analystChart || m.analystChart,
-              fiiDiiChart: meta?.fiiDiiChart || m.fiiDiiChart,
-              hrp_table: meta?.hrp_table || m.hrp_table,
+              priceChart,
+              growthChart,
+              analystChart,
+              fiiDiiChart,
+              hrp_table,
             }
           }),
         )
+
         // Reset scroll position to bottom on conversation load
         isUserScrolledUpRef.current = false
         setTimeout(() => scrollToBottom(false), 50)
@@ -307,6 +376,11 @@ function ChatPage() {
     setIsTimelineOpen(false)
     setResearchStage(null)
     setResearchLogHistory([])
+
+    isUserScrolledUpRef.current = false
+    setShowScrollBottomBtn(false)
+    setTimeout(() => scrollToBottom(true), 50)
+
 
     const controller = new AbortController()
     abortControllerRef.current = controller
@@ -510,26 +584,43 @@ function ChatPage() {
                   )
                 }
 
-                if (
-                  evt.priceChart ||
-                  evt.growthChart ||
-                  evt.analystChart ||
-                  evt.fiiDiiChart
-                ) {
+                if (evt.priceChart?.points && evt.priceChart.points.length > 0) {
                   setMessages((prev) =>
                     prev.map((msg) =>
                       msg.id === agentMsgId
-                        ? {
-                            ...msg,
-                            ...(evt.priceChart ? { priceChart: evt.priceChart } : {}),
-                            ...(evt.growthChart ? { growthChart: evt.growthChart } : {}),
-                            ...(evt.analystChart ? { analystChart: evt.analystChart } : {}),
-                            ...(evt.fiiDiiChart ? { fiiDiiChart: evt.fiiDiiChart } : {}),
-                          }
+                        ? { ...msg, priceChart: evt.priceChart }
                         : msg,
                     ),
                   )
                 }
+                if (evt.growthChart?.quarters && evt.growthChart.quarters.length > 0) {
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === agentMsgId
+                        ? { ...msg, growthChart: evt.growthChart }
+                        : msg,
+                    ),
+                  )
+                }
+                if (evt.analystChart?.targetPrices && evt.analystChart.targetPrices.length > 0) {
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === agentMsgId
+                        ? { ...msg, analystChart: evt.analystChart }
+                        : msg,
+                    ),
+                  )
+                }
+                if (evt.fiiDiiChart?.dates && evt.fiiDiiChart.dates.length > 0) {
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === agentMsgId
+                        ? { ...msg, fiiDiiChart: evt.fiiDiiChart }
+                        : msg,
+                    ),
+                  )
+                }
+
 
                 if (evt.errorMessage) {
                   accumulatedText += `\n\n⚠️ ${evt.errorMessage}`
@@ -943,7 +1034,25 @@ function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Floating Downward Arrow Scroll-to-Bottom Button (Bottom Left) */}
+      {showScrollBottomBtn && (
+        <button
+          type="button"
+          onClick={() => {
+            isUserScrolledUpRef.current = false
+            setShowScrollBottomBtn(false)
+            scrollToBottom(true)
+          }}
+          className="absolute bottom-28 left-6 md:left-8 z-40 bg-white hover:bg-amber-100 text-[#27272A] border-2 border-[#27272A] shadow-[3px_3px_0px_#27272A] active:shadow-none active:translate-x-[2px] active:translate-y-[2px] rounded-full p-2.5 flex items-center gap-1.5 text-xs font-bold font-mono transition-all cursor-pointer animate-bounce"
+          title="Scroll to bottom"
+        >
+          <ArrowDown className="h-4 w-4 text-[#2563EB]" />
+          <span className="hidden sm:inline">Latest</span>
+        </button>
+      )}
+
       {/* Floating Gemini Neubrutal Chatbox at Bottom Center */}
+
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-3xl bg-white border-2 border-[#27272A] shadow-[4px_4px_0px_#27272A] rounded-xl p-3.5 space-y-2.5 z-30">
         <textarea
           placeholder={

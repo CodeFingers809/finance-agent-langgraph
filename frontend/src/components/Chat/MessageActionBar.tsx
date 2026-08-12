@@ -5,21 +5,13 @@ import {
   FileDown,
   GitBranch,
   Loader2,
-  MoreHorizontal,
 } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 
 import { ResearchReportsService } from "@/client/organizations"
-import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import useAuth from "@/hooks/useAuth"
+import type { ChartArtifactsProps } from "@/components/Chat/ChartArtifacts"
 import { exportFormattedReportPdf } from "@/lib/exportPdf"
 
 export interface MessageActionBarProps {
@@ -29,6 +21,10 @@ export interface MessageActionBarProps {
     sender: "user" | "agent"
     metadata_json?: string | null
     created_at?: string
+    priceChart?: any
+    growthChart?: any
+    analystChart?: any
+    fiiDiiChart?: any
   }
   readonly conversationId?: string | null
   readonly onBranch: (messageId: string) => void
@@ -69,10 +65,18 @@ export function MessageActionBar({
   const handleExportPdf = async () => {
     setIsExporting(true)
     try {
+      const charts: ChartArtifactsProps = {
+        priceChart: message.priceChart,
+        growthChart: message.growthChart,
+        analystChart: message.analystChart,
+        fiiDiiChart: message.fiiDiiChart,
+      }
+      const hasCharts = Object.values(charts).some(Boolean)
       await exportFormattedReportPdf({
         title: deriveTitle(message.content, "Financial Research Note"),
         markdownReport: message.content,
         filename: `message-${message.id.slice(0, 8)}`,
+        charts: hasCharts ? charts : undefined,
       })
       toast.success("Exported PDF")
     } catch (err) {
@@ -85,13 +89,21 @@ export function MessageActionBar({
   const handleSaveReport = async () => {
     setIsSaving(true)
     try {
+      const charts = {
+        priceChart: message.priceChart ?? null,
+        growthChart: message.growthChart ?? null,
+        analystChart: message.analystChart ?? null,
+        fiiDiiChart: message.fiiDiiChart ?? null,
+      }
+      const hasCharts = Object.values(charts).some(Boolean)
       await ResearchReportsService.create({
         title: deriveTitle(message.content, "Research Report"),
         markdown_report: message.content,
         created_by_model: modelName ?? "",
         conversation_id: conversationId ?? null,
         message_id: message.id,
-      })
+        chart_data: hasCharts ? JSON.stringify(charts) : null,
+      } as any)
       setIsSaved(true)
       toast.success("Saved as research report")
       setTimeout(() => setIsSaved(false), 3000)
@@ -102,71 +114,84 @@ export function MessageActionBar({
     }
   }
 
+
   const isUser = message.sender === "user"
   const busy = isExporting || isSaving
 
-  let saveLabel = "Save as research report"
-  if (isSaved) saveLabel = "Saved"
-  else if (!isOrgAdmin) saveLabel = "Save (admins only)"
-
   return (
     <div
-      className={`sticky top-4 shrink-0 self-start opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 ${
-        isUser ? "mr-1" : "ml-1"
+      className={`sticky top-4 shrink-0 self-start opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 flex flex-col gap-1 ${
+        isUser ? "mr-1 items-end" : "ml-1 items-start"
       }`}
     >
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="Message actions"
-            className="h-7 w-7 border-2 border-[#27272A] bg-white text-[#27272A] shadow-[1.5px_1.5px_0px_#27272A] hover:bg-amber-100"
+      {/* Copy Button (available for both user and agent messages) */}
+      <button
+        type="button"
+        onClick={handleCopy}
+        title={copied ? "Copied" : "Copy text"}
+        className="h-7 w-7 flex items-center justify-center rounded border-2 border-[#27272A] bg-white text-[#27272A] shadow-[1.5px_1.5px_0px_#27272A] hover:bg-amber-100 transition-colors"
+      >
+        {copied ? (
+          <Check className="h-3.5 w-3.5 text-emerald-600" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" />
+        )}
+      </button>
+
+      {/* NOTE: User chat messages get ONLY the Copy button above.
+          Branching, PDF Export, and Saving as Research Report are reserved exclusively for agent messages. */}
+      {!isUser && (
+        <>
+          {/* Branch */}
+          <button
+            type="button"
+            onClick={() => onBranch(message.id)}
+            title="Branch from here"
+            className="h-7 w-7 flex items-center justify-center rounded border-2 border-[#27272A] bg-white text-[#27272A] shadow-[1.5px_1.5px_0px_#27272A] hover:bg-amber-100 transition-colors"
           >
-            {busy ? (
+            <GitBranch className="h-3.5 w-3.5" />
+          </button>
+
+          {/* Export PDF */}
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={isExporting}
+            title="Export as PDF"
+            className="h-7 w-7 flex items-center justify-center rounded border-2 border-[#27272A] bg-white text-[#27272A] shadow-[1.5px_1.5px_0px_#27272A] hover:bg-amber-100 transition-colors disabled:opacity-50"
+          >
+            {isExporting ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <MoreHorizontal className="h-3.5 w-3.5" />
+              <FileDown className="h-3.5 w-3.5" />
             )}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align={isUser ? "start" : "end"} className="w-52">
-          <DropdownMenuItem onClick={handleCopy}>
-            {copied ? (
-              <Check className="mr-2 h-4 w-4 text-emerald-600" />
-            ) : (
-              <Copy className="mr-2 h-4 w-4" />
-            )}
-            {copied ? "Copied" : "Copy text"}
-          </DropdownMenuItem>
+          </button>
 
-          <DropdownMenuItem onClick={() => onBranch(message.id)}>
-            <GitBranch className="mr-2 h-4 w-4" />
-            Branch from here
-          </DropdownMenuItem>
-
-          <DropdownMenuSeparator />
-
-          <DropdownMenuItem disabled={isExporting} onClick={handleExportPdf}>
-            <FileDown className="mr-2 h-4 w-4" />
-            {isExporting ? "Exporting..." : "Export as PDF"}
-          </DropdownMenuItem>
-
-          {/* Saving writes to the org's report library, so it's admin-only.
-              Shown-but-disabled for analysts; the backend enforces it too. */}
-          <DropdownMenuItem
-            disabled={!isOrgAdmin || isSaving}
+          {/* Save report (admin-only) */}
+          <button
+            type="button"
             onClick={handleSaveReport}
+            disabled={!isOrgAdmin || isSaving || busy}
+            title={
+              isSaved
+                ? "Saved"
+                : !isOrgAdmin
+                  ? "Save (admins only)"
+                  : "Save as research report"
+            }
+            className="h-7 w-7 flex items-center justify-center rounded border-2 border-[#27272A] bg-white text-[#27272A] shadow-[1.5px_1.5px_0px_#27272A] hover:bg-amber-100 transition-colors disabled:opacity-50"
           >
             {isSaved ? (
-              <Check className="mr-2 h-4 w-4 text-emerald-600" />
+              <Check className="h-3.5 w-3.5 text-emerald-600" />
+            ) : isSaving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <Bookmark className="mr-2 h-4 w-4" />
+              <Bookmark className="h-3.5 w-3.5" />
             )}
-            {saveLabel}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+          </button>
+        </>
+      )}
+
     </div>
   )
 }

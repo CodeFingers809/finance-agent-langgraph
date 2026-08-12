@@ -61,6 +61,7 @@ from app.models.research_report import (
     ResearchReportCreate,
     ResearchReportListItem,
     ResearchReportPublic,
+    ResearchReportUpdate,
 )
 from app.models.user import (
     UpdatePassword,
@@ -160,6 +161,7 @@ __all__ = [
     "ResearchReportCreate",
     "ResearchReportListItem",
     "ResearchReportPublic",
+    "ResearchReportUpdate",
     # re-exported third-party names, kept for backwards compatibility with
     # call sites that imported them from app.models (notably alembic/env.py).
     "SQLModel",

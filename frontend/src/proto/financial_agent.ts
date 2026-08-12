@@ -145,10 +145,11 @@ export function decodeProtobufEvent(base64Data: string): ParsedStreamEvent {
     const buffer = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0))
     const decoded = StreamEventType.decode(buffer)
     return StreamEventType.toObject(decoded, {
-      defaults: true,
+      defaults: false,
       longs: Number,
       enums: String,
     }) as ParsedStreamEvent
+
   } catch (err) {
     console.error("Failed to decode Protobuf event:", err)
     return { errorMessage: "Protobuf decode error" }

@@ -4,11 +4,11 @@ import {
   FileText,
   Search,
   FileDown,
-  Calendar,
-  Sparkles,
   Eye,
   Bookmark,
   Trash2,
+  MoreVertical,
+  Edit2,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -20,12 +20,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { ChartArtifacts, type ChartArtifactsProps } from "@/components/Chat/ChartArtifacts"
 import { MarkdownRenderer } from "@/components/Common/MarkdownRenderer"
 import { exportFormattedReportPdf } from "@/lib/exportPdf.tsx"
 import { CustomSpinner } from "@/components/Common/CustomSpinner"
 
 import useAuth from "@/hooks/useAuth"
 import { authFetch } from "@/lib/authFetch"
+import { ResearchReportsService } from "@/client/organizations"
 
 export const Route = createFileRoute("/_layout/research-reports")({
   component: SavedResearchReportsPage,
@@ -39,20 +48,45 @@ interface ResearchReport {
   created_by_model?: string | null
   created_at: string
   conversation_id?: string | null
+  charts?: ChartArtifactsProps | null
 }
 
-function cleanStreamText(rawText: string): string {
-  if (!rawText) return ""
-  let text = rawText
-  if (text.includes("[{'type':") || text.includes('[{"type":')) {
-    try {
-      text = text.replace(/\[\{'type':\s*'text',\s*'text':\s*'(.*?)'(?:,\s*'index':\s*\d+)?\}\]/g, "$1")
-      text = text.replace(/\[\{"type":\s*"text",\s*"text":\s*"(.*?)"(?:,\s*"index":\s*\d+)?\}\]/g, "$1")
-    } catch (_e) {
-      // ignore
+/** Extract plain text from stringified LangChain content blocks or raw markdown. */
+function extractText(raw: string): string {
+  if (!raw) return ""
+  let text = raw.trim()
+
+  // Detect Python-dict-style content blocks: [{'type': 'text', 'text': '...'}]
+  if (text.includes("'type':") || text.includes('"type":')) {
+    const parts: string[] = []
+    // Capture everything between 'text': '...' including escaped quotes
+    const re = /['"](text)['"]\s*:\s*'((?:[^'\\]|\\.)*)'/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(text)) !== null) {
+      parts.push(m[2].replace(/\\'/g, "'"))
+    }
+    if (parts.length > 0) {
+      text = parts.reduce((acc, part) => {
+        if (!acc) return part
+        if (/\w$/.test(acc) && /^\w/.test(part)) return acc + " " + part
+        return acc + part
+      }, "")
     }
   }
+
+
+  // Unescape literal \n sequences
   return text.replace(/\\n/g, "\n").trim()
+}
+
+/** Strip markdown heading markers and inline markup from a title string. */
+function stripMarkdown(s: string): string {
+  return s
+    .replace(/^#+\s*/gm, "")   // headings
+    .replace(/[*_`~]/g, "")    // bold/italic/code/strikethrough
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.length > 0) ?? s.trim()
 }
 
 function SavedResearchReportsPage() {
@@ -63,22 +97,36 @@ function SavedResearchReportsPage() {
   const [selectedReport, setSelectedReport] = useState<ResearchReport | null>(null)
   const [isExporting, setIsExporting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameTitle, setRenameTitle] = useState("")
 
   const canViewReports = (user as any)?.can_view_reports !== false
 
   const fetchReports = async () => {
     setLoading(true)
     try {
-      const res = await authFetch(`/research-reports`, {
-      })
+      const res = await authFetch(`/research-reports`, {})
       if (res.ok) {
         const data = await res.json()
         setReports(
-          data.map((r: any) => ({
-            ...r,
-            title: cleanStreamText(r.title) || "Research Report",
-            markdown_report: cleanStreamText(r.markdown_report),
-          }))
+          data.map((r: any) => {
+            const body = extractText(r.markdown_report)
+            const rawTitle = extractText(r.title)
+            let charts: ChartArtifactsProps | null = null
+            if (r.chart_data) {
+              try {
+                charts = typeof r.chart_data === "string"
+                  ? JSON.parse(r.chart_data)
+                  : r.chart_data
+              } catch { /* ignore */ }
+            }
+            return {
+              ...r,
+              title: stripMarkdown(rawTitle) || "Research Report",
+              markdown_report: body,
+              charts,
+            }
+          })
         )
       }
     } catch (err) {
@@ -87,6 +135,7 @@ function SavedResearchReportsPage() {
       setLoading(false)
     }
   }
+
 
   useEffect(() => {
     fetchReports()
@@ -110,6 +159,7 @@ function SavedResearchReportsPage() {
         symbol: report.symbol,
         createdAt: report.created_at,
         modelName: report.created_by_model,
+        charts: report.charts ?? undefined,
       })
       toast.success(`Exported "${report.title}" as formatted PDF`)
     } catch (err) {
@@ -143,6 +193,26 @@ function SavedResearchReportsPage() {
       toast.error("Error deleting research report")
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  const handleRenameReport = async (reportId: string, newTitle: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    try {
+      await ResearchReportsService.update(reportId, newTitle)
+      setReports((prev) =>
+        prev.map((r) => (r.id === reportId ? { ...r, title: newTitle } : r))
+      )
+      if (selectedReport?.id === reportId) {
+        setSelectedReport((prev) => (prev ? { ...prev, title: newTitle } : null))
+      }
+      toast.success("Report renamed successfully")
+    } catch (err) {
+      console.error("Rename report error:", err)
+      toast.error("Failed to rename report")
+    } finally {
+      setRenamingId(null)
+      setRenameTitle("")
     }
   }
 
@@ -203,71 +273,80 @@ function SavedResearchReportsPage() {
           </p>
         </div>
       ) : (
-        /* Reports Grid */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredReports.map((report) => (
             <div
               key={report.id}
-              className="neubrutal-card bg-white border-2 border-[#27272A] shadow-[4px_4px_0px_#27272A] rounded-xl p-5 flex flex-col justify-between space-y-4 hover:translate-y-[-2px] transition-all"
+              className="group relative neubrutal-card bg-white border-2 border-[#27272A] shadow-[4px_4px_0px_#27272A] rounded-xl p-5 flex flex-col space-y-3 hover:translate-y-[-2px] transition-all cursor-pointer"
+              onClick={() => setSelectedReport(report)}
             >
-              <div className="space-y-3">
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-extrabold text-base text-[#27272A] line-clamp-2 leading-snug">
-                    {report.title}
-                  </h3>
-                  {report.symbol && (
-                    <span className="px-2 py-0.5 text-[11px] font-extrabold bg-indigo-100 text-indigo-900 border border-[#27272A] rounded shadow-[1px_1px_0px_#27272A] shrink-0 font-mono">
-                      {report.symbol}
-                    </span>
-                  )}
-                </div>
-
-                <p className="text-xs text-[#52525B] line-clamp-3 leading-relaxed">
-                  {report.markdown_report.replace(/[\#\*\_\`]/g, "").slice(0, 160)}...
-                </p>
+              {/* 3-dots — top-right, only visible on hover */}
+              <div
+                className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7 border-2 border-[#27272A] bg-white shadow-[1.5px_1.5px_0px_#27272A] hover:bg-amber-100"
+                      aria-label="Report actions"
+                    >
+                      <MoreVertical className="h-3.5 w-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuItem onClick={() => setSelectedReport(report)}>
+                      <Eye className="mr-2 h-4 w-4" />
+                      View
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={isExporting}
+                      onClick={() => handleExportPdf(report)}
+                    >
+                      <FileDown className="mr-2 h-4 w-4" />
+                      Export PDF
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      disabled={deletingId === report.id}
+                      onClick={(e) => handleDeleteReport(report.id, e as any)}
+                      className="text-rose-700 focus:text-rose-700 focus:bg-rose-50"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+{deletingId === report.id ? "Deleting…" : "Delete"}
+                      </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setRenamingId(report.id)
+                        setRenameTitle(report.title)
+                      }}
+                    >
+                      <Edit2 className="mr-2 h-4 w-4" />
+                      Rename
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
-              <div className="pt-3 border-t border-[#27272A]/15 space-y-3">
-                <div className="flex items-center justify-between text-[11px] text-[#52525B] font-medium">
-                  <div className="flex items-center gap-1.5">
-                    <Calendar className="h-3.5 w-3.5" />
-                    <span>{new Date(report.created_at).toLocaleDateString()}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Sparkles className="h-3.5 w-3.5 text-amber-600" />
-                    <span className="font-mono text-[10px]">
-                      {report.created_by_model || "financial-agent-v1"}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2">
-                  <Button
-                    onClick={() => setSelectedReport(report)}
-                    variant="outline"
-                    size="sm"
-                    className="neubrutal-btn bg-[#FAF6F0] hover:bg-amber-100 font-bold text-xs h-8 border-2 border-[#27272A] flex items-center justify-center gap-1"
-                  >
-                    <Eye className="h-3.5 w-3.5" /> View
-                  </Button>
-                  <Button
-                    onClick={() => handleExportPdf(report)}
-                    disabled={isExporting}
-                    size="sm"
-                    className="neubrutal-btn-primary font-bold text-xs h-8 border-2 border-[#27272A] flex items-center justify-center gap-1"
-                  >
-                    <FileDown className="h-3.5 w-3.5" /> PDF
-                  </Button>
-                  <Button
-                    onClick={(e) => handleDeleteReport(report.id, e)}
-                    disabled={deletingId === report.id}
-                    size="sm"
-                    className="neubrutal-btn bg-rose-100 hover:bg-rose-200 text-rose-900 font-bold text-xs h-8 border-2 border-[#27272A] flex items-center justify-center gap-1 shadow-[2px_2px_0px_#27272A]"
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-rose-600" /> Delete
-                  </Button>
-                </div>
+              {/* Title + optional symbol badge */}
+              <div className="flex items-start gap-2 pr-8">
+                <h3 className="font-extrabold text-base text-[#27272A] line-clamp-2 leading-snug flex-1">
+                  {report.title}
+                </h3>
+                {report.symbol && (
+                  <span className="px-2 py-0.5 text-[11px] font-extrabold bg-indigo-100 text-indigo-900 border border-[#27272A] rounded shadow-[1px_1px_0px_#27272A] shrink-0 font-mono">
+                    {report.symbol}
+                  </span>
+                )}
               </div>
+
+              {/* Preview */}
+              <p className="text-xs text-[#52525B] line-clamp-4 leading-relaxed">
+                {extractText(report.markdown_report).slice(0, 240)}
+              </p>
             </div>
           ))}
         </div>
@@ -291,7 +370,12 @@ function SavedResearchReportsPage() {
 
           <div className="flex-1 overflow-y-auto p-4 bg-[#FAF6F0] border-2 border-[#27272A] rounded-lg my-4 space-y-4">
             {selectedReport && (
-              <MarkdownRenderer content={selectedReport.markdown_report} />
+              <>
+                {selectedReport.charts && (
+                  <ChartArtifacts {...selectedReport.charts} />
+                )}
+                <MarkdownRenderer content={selectedReport.markdown_report} />
+              </>
             )}
           </div>
 
@@ -323,6 +407,42 @@ function SavedResearchReportsPage() {
                   <FileDown className="h-4 w-4" /> Export Formatted PDF
                 </Button>
               )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename Report Dialog */}
+      <Dialog open={!!renamingId} onOpenChange={() => { setRenamingId(null); setRenameTitle("") }}>
+        <DialogContent className="bg-white border-2 border-[#27272A] shadow-[6px_6px_0px_#27272A] rounded-xl p-6 max-w-md">
+          <DialogHeader className="border-b-2 border-[#27272A] pb-4 shrink-0">
+            <DialogTitle className="text-xl font-extrabold text-[#27272A]">Rename Report</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input
+              value={renameTitle}
+              onChange={(e) => setRenameTitle(e.target.value)}
+              placeholder="Enter new title"
+              className="border-2 border-[#27272A] font-bold text-xs text-[#27272A] h-10"
+              autoFocus
+            />
+            <div className="flex justify-end gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => { setRenamingId(null); setRenameTitle("") }}
+                className="neubrutal-btn border-2 border-[#27272A] font-bold text-xs h-9 px-4"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  const report = reports.find((r) => r.id === renamingId)
+                  if (report) handleRenameReport(report.id, renameTitle)
+                }}
+                className="neubrutal-btn-primary border-2 border-[#27272A] font-bold text-xs h-9 px-4"
+              >
+                Save
+              </Button>
             </div>
           </div>
         </DialogContent>

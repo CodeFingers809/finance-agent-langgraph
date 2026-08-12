@@ -1,14 +1,17 @@
 import { useSignIn } from "@clerk/react/legacy"
+import { useClerk } from "@clerk/react"
+
 import { zodResolver } from "@hookform/resolvers/zod"
 import {
   createFileRoute,
   Link as RouterLink,
   useNavigate,
 } from "@tanstack/react-router"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
+import { ArrowRight, LogOut, User } from "lucide-react"
 
 import type { Body_login_login_access_token as AccessToken } from "@/client"
 import { AuthLayout } from "@/components/Common/AuthLayout"
@@ -21,6 +24,7 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { PasswordInput } from "@/components/ui/password-input"
 import useAuth from "@/hooks/useAuth"
@@ -61,9 +65,6 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>
 
-// Redirect-away-when-signed-in is handled in the component via Clerk's real
-// state; a cookie check here can be stale after sign-out and would trap the
-// user in a /login <-> /chat loop.
 export const Route = createFileRoute("/login")({
   component: Login,
 
@@ -78,16 +79,10 @@ export const Route = createFileRoute("/login")({
 
 function Login() {
   const navigate = useNavigate()
-  const { isLoaded: authLoaded, isSignedIn } = useAuth()
+  const { isSignedIn, clerkUser, logout } = useAuth()
   const { isLoaded, signIn, setActive } = useSignIn()
+  const { signOut } = useClerk()
   const [loading, setLoading] = useState(false)
-
-  // Already signed in -> leave. Based on Clerk's real state, not a cookie.
-  useEffect(() => {
-    if (authLoaded && isSignedIn) {
-      navigate({ to: "/chat", replace: true })
-    }
-  }, [authLoaded, isSignedIn, navigate])
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -103,31 +98,72 @@ function Login() {
     if (loading || !isLoaded || !signIn) return
     setLoading(true)
     try {
-      // Clerk is the only identity provider. Errors must propagate: silently
-      // continuing to /chat without a session produced an endless 401 loop.
+      if (isSignedIn && signOut) {
+        await signOut()
+      }
       const result = await signIn.create({
         identifier: data.username,
         password: data.password,
       })
 
       if (result.status !== "complete") {
-        // Password sign-in completes in one step for this instance (device
-        // trust is disabled). Anything else means the Clerk instance config
-        // changed and needs a matching UI step built here.
         toast.error(SIGN_IN_STEP_MESSAGES[result.status ?? ""] ?? `Sign-in needs an extra step (${result.status}).`)
         return
       }
 
       await setActive({ session: result.createdSessionId })
       toast.success("Successfully logged in!")
-      // Full reload so the Clerk token bridge initializes with the new session.
-      window.location.href = "/chat"
+      navigate({ to: "/chat", replace: true })
     } catch (err: unknown) {
       toast.error(clerkErrorMessage(err, "Failed to log in"))
     } finally {
       setLoading(false)
     }
   }
+
+  if (isSignedIn) {
+    const userEmail = clerkUser?.primaryEmailAddress?.emailAddress || "your active account"
+    return (
+      <AuthLayout>
+        <div className="flex flex-col gap-6 text-center py-4">
+          <div className="h-12 w-12 rounded-xl bg-amber-200 border-2 border-[#27272A] shadow-[2.5px_2.5px_0px_#27272A] flex items-center justify-center text-[#27272A] mx-auto">
+            <User className="h-6 w-6" />
+          </div>
+          <div className="space-y-1">
+            <h1 className="text-2xl font-extrabold text-[#27272A]">Already Signed In</h1>
+            <p className="text-xs text-[#52525B]">
+              You are currently logged in as <strong className="text-[#27272A]">{userEmail}</strong>.
+            </p>
+          </div>
+
+          <div className="grid gap-3 pt-2">
+            <Button
+              type="button"
+              onClick={() => navigate({ to: "/chat" })}
+              className="neubrutal-btn-primary w-full h-11 text-xs gap-2"
+            >
+              Continue to Chat Terminal <ArrowRight className="h-4 w-4" />
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => {
+                setLoading(true)
+                await logout()
+              }}
+              disabled={loading}
+              className="neubrutal-btn w-full h-11 text-xs gap-2 bg-white text-[#27272A]"
+            >
+              <LogOut className="h-4 w-4" /> Sign Out to Switch Account
+            </Button>
+          </div>
+        </div>
+      </AuthLayout>
+    )
+  }
+
+
 
   return (
     <AuthLayout>
@@ -139,6 +175,20 @@ function Login() {
           <div className="flex flex-col items-center gap-2 text-center">
             <h1 className="text-2xl font-bold">Login to your account</h1>
           </div>
+
+          {isSignedIn && (
+            <div className="p-3 rounded-lg bg-amber-100 border border-[#27272A] text-xs font-medium text-[#27272A] flex items-center justify-between">
+              <span>You are currently signed in.</span>
+              <button
+                type="button"
+                onClick={() => signOut?.()}
+                className="font-bold underline text-blue-600 hover:text-blue-800 ml-2 cursor-pointer"
+              >
+                Sign Out First
+              </button>
+            </div>
+          )}
+
 
           <div className="grid gap-4">
             <FormField

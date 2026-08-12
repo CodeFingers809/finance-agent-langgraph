@@ -50,18 +50,18 @@ def extract_plain_text_from_llm_content(content: Any) -> str:
     else:
         text = str(content)
 
-    text = text.strip()
     if text.startswith("[{'type':") or text.startswith('[{"type":'):
         try:
             parsed = ast.literal_eval(text)
             if isinstance(parsed, list):
                 extracted = "".join(item.get("text", "") for item in parsed if isinstance(item, dict))
                 if extracted:
-                    return extracted.strip()
+                    return extracted
         except Exception:
             pass
 
     return text
+
 
 
 def get_research_llm(model_name: str = "claude-haiku-4-5-20251001", temperature: float = 0.1):
@@ -124,7 +124,9 @@ RULES FOR DATA GATHERING:
    - Identify primary sector catalysts and TAM (Total Addressable Market) projections.
    - Uncover all key sub-industries, tier-1 OEMs, component manufacturers, subsystem suppliers, and raw material providers.
    - Fetch stock prices, financial metrics, YoY/QoQ growth rates, and recent market news for top companies in those sub-industries.
-3. You can execute 1 to 4 tools in PARALLEL in each iteration.
+3. Call chart tools (`get_price_history_chart_data`, `get_quarterly_growth_chart_data`, `get_analyst_target_chart_data`, `get_fii_dii_flows`) whenever relevant to generate interactive UI charts for stocks, earnings, targets, and institutional flows.
+4. You can execute 1 to 4 tools in PARALLEL in each iteration.
+
 
 ---
 
@@ -132,9 +134,15 @@ AVAILABLE TOOLS:
 - search_web_for_stock_info(query): Search DuckDuckGo web search for market news, industry reports, sub-industry OEMs, supply chain analysis.
 - get_stock_prices_and_metrics(symbols): Fetch price, P/E, P/B, Market Cap, EV/EBITDA for symbols (e.g. ["HAL.NS", "BEL.NS", "DATAPATT.NS"]).
 - get_financial_statements(symbol): Fetch annual/quarterly financials & YoY/QoQ growth rates.
+- get_stock_news(symbol): Fetch latest news articles related to an Indian stock.
+- get_analyst_predictions(symbol): Fetch analyst recommendations and target prices for an Indian stock.
+- get_indian_indices(): Fetch major Indian market indices status (NIFTY 50, SENSEX, NIFTY BANK, NIFTY IT).
 - run_technical_analysis(symbol): Fetch EMA crossovers, MACD, RSI, volume surges.
 - screen_stocks(sector_or_theme): Screen top stocks in "defense", "it", "banking", "pharma", "renewable", "auto".
+- recommend_portfolio_optimization(symbols): Perform HRP portfolio optimization for given stock symbols.
 - get_market_news(): Broader market trends & news.
+- get_user_portfolio(user_email_or_id): Fetch current user's saved portfolio holdings from database.
+- create_user_watchlist(watchlist_name, symbols): Create a new custom watchlist.
 - calculate_scientific_expression(expression): Scientific math & LaTeX formulas.
 - get_price_history_chart_data(symbol, period): Fetch price history series for charts.
 - get_quarterly_growth_chart_data(symbol): Fetch quarterly revenue & growth series for charts.
@@ -197,6 +205,9 @@ FRIENDLY_TOOL_NAMES = {
     "search_web_for_stock_info": "Web Search",
     "get_stock_prices_and_metrics": "Market Metrics",
     "get_financial_statements": "Financial Statements",
+    "get_stock_news": "Stock News",
+    "get_analyst_predictions": "Analyst Predictions",
+    "get_indian_indices": "Indian Indices",
     "run_technical_analysis": "Technical Analysis",
     "screen_stocks": "Stock Screener",
     "recommend_portfolio_optimization": "Portfolio Optimization",
@@ -210,6 +221,7 @@ FRIENDLY_TOOL_NAMES = {
     "get_fii_dii_flows": "FII/DII Flows",
     "search_org_research_reports": "Org Research Reports Memory",
 }
+
 
 async def stream_agent_events_research(
     user_query: str,

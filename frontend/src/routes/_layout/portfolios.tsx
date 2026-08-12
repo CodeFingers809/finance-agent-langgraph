@@ -170,8 +170,8 @@ function PortfoliosPage() {
     }
 
     try {
-      const res = await fetch(
-        `${OpenAPI.BASE}/api/v1/portfolios/${portfolio.id}/items`,
+      const res = await authFetch(
+        `/portfolios/${portfolio.id}/items`,
         {
           method: "POST",
           headers: {
@@ -216,8 +216,8 @@ function PortfoliosPage() {
     if (!portfolio || !editingItem || !editQuantity || !editBuyPrice) return
 
     try {
-      const res = await fetch(
-        `${OpenAPI.BASE}/api/v1/portfolios/${portfolio.id}/items/${editingItem.id}`,
+      const res = await authFetch(
+        `/portfolios/${portfolio.id}/items/${editingItem.id}`,
         {
           method: "PUT",
           headers: {
@@ -249,8 +249,8 @@ function PortfoliosPage() {
   const handleDeleteItem = async (itemId: string) => {
     if (!portfolio) return
     try {
-      const res = await fetch(
-        `${OpenAPI.BASE}/api/v1/portfolios/${portfolio.id}/items/${itemId}`,
+      const res = await authFetch(
+        `/portfolios/${portfolio.id}/items/${itemId}`,
         {
           method: "DELETE",
         },
@@ -264,6 +264,7 @@ function PortfoliosPage() {
       showErrorToast("Failed to delete item")
     }
   }
+
 
   return (
     <div className="p-4 md:p-8 space-y-6 bg-[#FAF6F0] text-[#27272A] min-h-full">

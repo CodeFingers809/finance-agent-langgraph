@@ -1,117 +1,122 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+import redis
 from fastapi import HTTPException, status
-from sqlmodel import Session, select
+from sqlmodel import Session
 
-from app.models import UserQuota, User
+from app.core.config import settings
+from app.models import User
+
+# Deprecated: UserQuota SQLModel table is preserved in database schema for backward compatibility,
+# but active daily quota rate-limiting is now Redis-backed (`quota:{user_id}:{utc_date}:{tier}`).
+
+_sync_redis_client: redis.Redis | None = None
 
 
-def check_and_update_quota(session: Session, user_id: uuid.UUID, model_name: str) -> UserQuota:
-    user = session.get(User, user_id)
-    if user and user.is_superuser:
-        quota = session.exec(select(UserQuota).where(UserQuota.user_id == user_id)).first()
-        if not quota:
-            quota = UserQuota(
-                user_id=user_id,
-                last_request_at=None,
-                daily_standard_count=0,
-                daily_upgraded_count=0,
-                last_reset_date=datetime.now(UTC).strftime("%Y-%m-%d"),
-            )
-            session.add(quota)
-            session.commit()
-            session.refresh(quota)
-        return quota
+def get_sync_redis() -> redis.Redis:
+    """Return singleton synchronous Redis client for rate limiting."""
+    global _sync_redis_client
+    if _sync_redis_client is None:
+        _sync_redis_client = redis.Redis.from_url(settings.REDIS_URL, decode_responses=True)
+    return _sync_redis_client
+
+
+def get_seconds_to_utc_midnight() -> int:
+    """Calculate remaining seconds until UTC midnight for Redis key EXPIRE."""
+    now = datetime.now(UTC)
+    midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return max(1, int((midnight - now).total_seconds()))
+
+
+def check_and_update_quota(
+    session: Session,
+    user_id: uuid.UUID | str,
+    model_name: str,
+    is_admin: bool = False,
+) -> dict:
+    """
+    Enforces daily quota using Redis keys `quota:{user_id}:{utc_date}:{tier}`.
+    Standard: 10/day, Upgraded: 3/day. Admin bypass allowed.
+    Raises HTTPException(429) if daily limit exceeded.
+    """
+    if is_admin:
+        return {"status": "admin_bypass"}
+
+    if isinstance(user_id, uuid.UUID) and session is not None:
+        user = session.get(User, user_id)
+        if user and user.is_superuser:
+            return {"status": "admin_bypass"}
 
     today_str = datetime.now(UTC).strftime("%Y-%m-%d")
-    now = datetime.now(UTC)
-
-    quota = session.exec(select(UserQuota).where(UserQuota.user_id == user_id)).first()
-
-    if not quota:
-        quota = UserQuota(
-            user_id=user_id,
-            last_request_at=None,
-            daily_standard_count=0,
-            daily_upgraded_count=0,
-            last_reset_date=today_str,
-        )
-        session.add(quota)
-        session.commit()
-        session.refresh(quota)
-
-    # Check daily reset
-    if quota.last_reset_date != today_str:
-        quota.daily_standard_count = 0
-        quota.daily_upgraded_count = 0
-        quota.last_reset_date = today_str
-
     is_upgraded = "flash" in model_name.lower() and "lite" not in model_name.lower()
+    tier = "upgraded" if is_upgraded else "standard"
+    limit = 3 if is_upgraded else 10
 
-    if is_upgraded:
-        if quota.daily_upgraded_count >= 3:
+    key = f"quota:{str(user_id)}:{today_str}:{tier}"
+    r = get_sync_redis()
+
+    count = r.incr(key)
+    if count == 1:
+        ttl = get_seconds_to_utc_midnight()
+        r.expire(key, ttl, nx=True)
+
+    if count > limit:
+        r.decr(key)
+        if is_upgraded:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Daily limit reached for upgraded Gemini Flash model (3 requests/day).",
             )
-        quota.daily_upgraded_count += 1
-    else:
-        if quota.daily_standard_count >= 10:
+        else:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Daily quota reached for standard Gemini Flash Lite model (10 requests/day).",
             )
-        quota.daily_standard_count += 1
 
-    quota.last_request_at = now
-    session.add(quota)
-    session.commit()
-    session.refresh(quota)
-    return quota
+    return {"status": "allowed", "count": count, "limit": limit}
 
 
-def check_research_mode_quota(session: Session, user_id: uuid.UUID) -> None:
+def check_research_mode_quota(
+    session: Session,
+    user_id: uuid.UUID | str,
+    is_admin: bool = False,
+) -> None:
     """
-    Enforces strict 1 research report per user per day (independent of chat quotas).
-    Research mode is exclusive to gpt-5.6-luna.
+    Enforces strict 1 research report per user per day using Redis.
     Raises HTTPException(429) if daily limit exceeded.
     """
-    user = session.get(User, user_id)
-    if user and user.is_superuser:
+    if is_admin:
         return
+
+    if isinstance(user_id, uuid.UUID) and session is not None:
+        user = session.get(User, user_id)
+        if user and user.is_superuser:
+            return
 
     today_str = datetime.now(UTC).strftime("%Y-%m-%d")
+    key = f"quota:{str(user_id)}:{today_str}:research"
+    r = get_sync_redis()
 
-    quota = session.exec(select(UserQuota).where(UserQuota.user_id == user_id)).first()
-    if not quota:
-        quota = UserQuota(
-            user_id=user_id,
-            last_request_at=None,
-            daily_standard_count=0,
-            daily_upgraded_count=0,
-            last_reset_date=today_str,
-            last_research_request_date=None,
-        )
-        session.add(quota)
-        session.commit()
-        session.refresh(quota)
-        return
+    count = r.incr(key)
+    if count == 1:
+        ttl = get_seconds_to_utc_midnight()
+        r.expire(key, ttl, nx=True)
 
-    if quota.last_research_request_date == today_str:
+    if count > 1:
+        r.decr(key)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Research mode limited to 1 report per day (resets at UTC midnight).",
         )
 
-    quota.last_research_request_date = today_str
-    session.add(quota)
-    session.commit()
-    session.refresh(quota)
 
-
-def get_user_quota_status(session: Session, user_id: uuid.UUID) -> dict[str, int]:
-    user = session.get(User, user_id)
-    if user and user.is_superuser:
+def get_user_quota_status(
+    session: Session,
+    user_id: uuid.UUID | str,
+    is_admin: bool = False,
+) -> dict[str, int | bool]:
+    """Return user's remaining quota status from Redis."""
+    if is_admin:
         return {
             "standard_count": 0,
             "standard_remaining_today": 999,
@@ -126,27 +131,33 @@ def get_user_quota_status(session: Session, user_id: uuid.UUID) -> dict[str, int
             "is_limited": False,
         }
 
+    if isinstance(user_id, uuid.UUID) and session is not None:
+        user = session.get(User, user_id)
+        if user and user.is_superuser:
+            return {
+                "standard_count": 0,
+                "standard_remaining_today": 999,
+                "standard_limit_today": 999,
+                "upgraded_count": 0,
+                "upgraded_remaining_today": 999,
+                "upgraded_limit_today": 999,
+                "research_count": 0,
+                "research_remaining_today": 999,
+                "research_limit_today": 999,
+                "seconds_until_next_allowed": 0,
+                "is_limited": False,
+            }
+
     today_str = datetime.now(UTC).strftime("%Y-%m-%d")
+    r = get_sync_redis()
 
-    quota = session.exec(select(UserQuota).where(UserQuota.user_id == user_id)).first()
-    if not quota:
-        return {
-            "standard_count": 0,
-            "standard_remaining_today": 10,
-            "standard_limit_today": 10,
-            "upgraded_count": 0,
-            "upgraded_remaining_today": 3,
-            "upgraded_limit_today": 3,
-            "research_count": 0,
-            "research_remaining_today": 1,
-            "research_limit_today": 1,
-            "seconds_until_next_allowed": 0,
-            "is_limited": False,
-        }
+    std_val = r.get(f"quota:{str(user_id)}:{today_str}:standard")
+    upg_val = r.get(f"quota:{str(user_id)}:{today_str}:upgraded")
+    res_val = r.get(f"quota:{str(user_id)}:{today_str}:research")
 
-    standard_count = quota.daily_standard_count if quota.last_reset_date == today_str else 0
-    upgraded_count = quota.daily_upgraded_count if quota.last_reset_date == today_str else 0
-    research_count = 1 if quota.last_research_request_date == today_str else 0
+    standard_count = int(std_val) if std_val else 0
+    upgraded_count = int(upg_val) if upg_val else 0
+    research_count = int(res_val) if res_val else 0
 
     return {
         "standard_count": standard_count,
@@ -158,7 +169,6 @@ def get_user_quota_status(session: Session, user_id: uuid.UUID) -> dict[str, int
         "research_count": research_count,
         "research_remaining_today": max(0, 1 - research_count),
         "research_limit_today": 1,
-        "seconds_until_next_allowed": 0,
+        "seconds_until_next_allowed": get_seconds_to_utc_midnight(),
         "is_limited": standard_count >= 10,
     }
-

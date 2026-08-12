@@ -149,6 +149,12 @@ export const ResearchReportsService = {
       body: JSON.stringify(body),
     }),
 
+  update: (id: string, title: string) =>
+    request<ResearchReportDetail>(`/research-reports/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    }),
+
   remove: (id: string) =>
     request<{ status: string; message: string }>(`/research-reports/${id}`, {
       method: "DELETE",

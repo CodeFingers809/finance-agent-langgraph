@@ -22,6 +22,13 @@ CRITICAL TOOL EXECUTION MANDATE:
 - When requested to create a watchlist (e.g. "put them into a watchlist", "create a watchlist for these stocks", "save stocks to watchlist"), YOU MUST EXPLICITLY CALL the `create_user_watchlist` tool with the watchlist_name and the array of stock symbols (e.g. ['ITC.NS', 'DABUR.NS', 'HINDUNILVR.NS']).
 - NEVER write text claiming you created a watchlist unless you actually invoked the `create_user_watchlist` tool!
 
+CRITICAL CHART & VISUAL ARTIFACT MANDATE:
+- Whenever analyzing a stock's price history, price movement, or technical trend (e.g. "show price chart for RELIANCE"), YOU MUST CALL `get_price_history_chart_data`.
+- Whenever analyzing a company's quarterly revenue, earnings, or financial growth trajectory, YOU MUST CALL `get_quarterly_growth_chart_data`.
+- Whenever discussing broker estimates, consensus price targets, or analyst recommendations, YOU MUST CALL `get_analyst_target_chart_data`.
+- Whenever discussing FII/DII institutional money flows or market sentiment, YOU MUST CALL `get_fii_dii_flows`.
+- Calling these chart tools automatically generates rich interactive charts and artifacts in the UI!
+
 Key Instructions:
 1. Always analyze Indian stocks using symbols ending in .NS for NSE or .BO for BSE (e.g. RELIANCE.NS, TCS.NS, HDFCBANK.NS, MAZDOCK.NS).
 2. Use tools to fetch actual price data, fundamental metrics, balance sheets, news, analyst target prices, technical indicators, and portfolio metrics. Never make up financial metrics.
@@ -31,6 +38,7 @@ Key Instructions:
 6. You can call multiple tools in parallel (fan out) when comparing multiple stocks or fetching different data sources simultaneously.
 7. Provide crisp, data-backed financial analysis with key highlights, risks, and valuation overview. Include disclaimers that output is for informational purposes only.
 """
+
 
 
 
@@ -79,8 +87,10 @@ def get_agent_executor(model_name: str = "gemini-3.5-flash-lite"):
     agent = create_react_agent(
         model=llm,
         tools=ALL_FINANCIAL_TOOLS,
+        prompt=SYSTEM_PROMPT,
     )
     return agent
+
 
 
 async def stream_agent_events(
@@ -143,79 +153,93 @@ async def stream_agent_events(
                 tool_output = event["data"].get("output", "")
                 exec_time = int((time.time() - start_time) * 1000)
 
-                output_str = str(tool_output)
+                if hasattr(tool_output, "content"):
+                    output_str = str(tool_output.content)
+                elif isinstance(tool_output, dict) and "content" in tool_output:
+                    output_str = str(tool_output["content"])
+                else:
+                    output_str = str(tool_output)
+
+                clean_output = output_str
+                chart_data_dict = {}
+
+                try:
+                    import json
+                    parsed = json.loads(output_str)
+                    if isinstance(parsed, dict):
+                        if "_llm_message" in parsed:
+                            clean_output = parsed["_llm_message"]
+                        if "_chart_payload" in parsed:
+                            chart_data_dict = parsed["_chart_payload"]
+                        else:
+                            chart_data_dict = parsed
+                except Exception:
+                    pass
+
+
                 yield {
                     "type": "tool_end",
                     "tool_name": tool_name,
-                    "output_json": output_str,
+                    "output_json": clean_output,
                     "execution_time_ms": exec_time,
                 }
 
                 if tool_name == "recommend_portfolio_optimization":
                     try:
-                        import json
-                        parsed = json.loads(output_str)
                         yield {
                             "type": "hrp_result",
-                            "symbols": parsed.get("symbols", []),
-                            "weights": [float(w) for w in parsed.get("weights", [])],
-                            "summary_notes": parsed.get("notes", ""),
+                            "symbols": chart_data_dict.get("symbols", []),
+                            "weights": [float(w) for w in chart_data_dict.get("weights", [])],
+                            "summary_notes": chart_data_dict.get("notes", ""),
                         }
                     except Exception:
                         pass
                 elif tool_name == "get_price_history_chart_data":
                     try:
-                        import json
-                        parsed = json.loads(output_str)
                         yield {
                             "type": "price_chart",
-                            "symbol": parsed.get("symbol", ""),
-                            "points": parsed.get("points", []),
-                            "period": parsed.get("period", ""),
+                            "symbol": chart_data_dict.get("symbol", ""),
+                            "points": chart_data_dict.get("points", []),
+                            "period": chart_data_dict.get("period", ""),
                         }
                     except Exception:
                         pass
                 elif tool_name == "get_quarterly_growth_chart_data":
                     try:
-                        import json
-                        parsed = json.loads(output_str)
                         yield {
                             "type": "growth_chart",
-                            "symbol": parsed.get("symbol", ""),
-                            "quarters": parsed.get("quarters", []),
-                            "revenue": [float(v) for v in parsed.get("revenue", [])],
-                            "net_income": [float(v) for v in parsed.get("net_income", [])],
-                            "yoy_growth_pct": [float(v) for v in parsed.get("yoy_growth_pct", [])],
-                            "qoq_growth_pct": [float(v) for v in parsed.get("qoq_growth_pct", [])],
+                            "symbol": chart_data_dict.get("symbol", ""),
+                            "quarters": chart_data_dict.get("quarters", []),
+                            "revenue": [float(v) for v in chart_data_dict.get("revenue", [])],
+                            "net_income": [float(v) for v in chart_data_dict.get("net_income", [])],
+                            "yoy_growth_pct": [float(v) for v in chart_data_dict.get("yoy_growth_pct", [])],
+                            "qoq_growth_pct": [float(v) for v in chart_data_dict.get("qoq_growth_pct", [])],
                         }
                     except Exception:
                         pass
                 elif tool_name == "get_analyst_target_chart_data":
                     try:
-                        import json
-                        parsed = json.loads(output_str)
                         yield {
                             "type": "analyst_chart",
-                            "symbol": parsed.get("symbol", ""),
-                            "dates": parsed.get("dates", []),
-                            "target_prices": [float(v) for v in parsed.get("target_prices", [])],
-                            "firms": parsed.get("firms", []),
-                            "current_price": float(parsed.get("current_price", 0.0)),
+                            "symbol": chart_data_dict.get("symbol", ""),
+                            "dates": chart_data_dict.get("dates", []),
+                            "target_prices": [float(v) for v in chart_data_dict.get("target_prices", [])],
+                            "firms": chart_data_dict.get("firms", []),
+                            "current_price": float(chart_data_dict.get("current_price", 0.0)),
                         }
                     except Exception:
                         pass
                 elif tool_name == "get_fii_dii_flows":
                     try:
-                        import json
-                        parsed = json.loads(output_str)
                         yield {
                             "type": "fii_dii_chart",
-                            "dates": parsed.get("dates", []),
-                            "fii_net_cr": [float(v) for v in parsed.get("fii_net_cr", [])],
-                            "dii_net_cr": [float(v) for v in parsed.get("dii_net_cr", [])],
+                            "dates": chart_data_dict.get("dates", []),
+                            "fii_net_cr": [float(v) for v in chart_data_dict.get("fii_net_cr", [])],
+                            "dii_net_cr": [float(v) for v in chart_data_dict.get("dii_net_cr", [])],
                         }
                     except Exception:
                         pass
+
     except Exception as e:
         err_str = str(e)
         if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
