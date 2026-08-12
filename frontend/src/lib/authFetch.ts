@@ -28,8 +28,13 @@ export async function authFetch(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
-  return fetch(`${OpenAPI.BASE}/api/v1${path}`, {
+  const res = await fetch(`${OpenAPI.BASE}/api/v1${path}`, {
     ...init,
     headers: { ...(await authHeader()), ...init.headers },
   })
+  if (res.status === 401 && window.location.pathname !== "/login") {
+    window.location.href = "/login"
+  }
+  return res
 }
+

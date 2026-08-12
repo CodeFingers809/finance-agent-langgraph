@@ -42,10 +42,16 @@ function UserInfo({ fullName, email }: UserInfoProps) {
 }
 
 export function User({ user }: { user: any }) {
-  const { logout } = useAuth()
+  const { logout, clerkUser } = useAuth()
   const { isMobile, setOpenMobile } = useSidebar()
 
-  if (!user) return null
+  const displayName =
+    user?.full_name ||
+    clerkUser?.fullName ||
+    clerkUser?.primaryEmailAddress?.emailAddress ||
+    "User Account"
+  const displayEmail =
+    user?.email || clerkUser?.primaryEmailAddress?.emailAddress || ""
 
   const handleMenuClick = () => {
     if (isMobile) {
@@ -62,10 +68,10 @@ export function User({ user }: { user: any }) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
-              className="w-full flex items-center justify-between p-2 bg-white border-2 border-[#27272A] shadow-[2px_2px_0px_#27272A] rounded-lg hover:bg-amber-100 transition-colors text-left"
+              className="w-full flex items-center justify-between p-2 bg-white border-2 border-[#27272A] shadow-[2px_2px_0px_#27272A] rounded-lg hover:bg-amber-100 transition-colors text-left cursor-pointer"
               data-testid="user-menu"
             >
-              <UserInfo fullName={user?.full_name} email={user?.email} />
+              <UserInfo fullName={displayName} email={displayEmail} />
               <ChevronsUpDown className="ml-auto size-4 text-[#27272A] shrink-0" />
             </button>
           </DropdownMenuTrigger>
@@ -76,9 +82,10 @@ export function User({ user }: { user: any }) {
             sideOffset={6}
           >
             <DropdownMenuLabel className="p-1 font-normal border-b border-[#27272A] pb-2 mb-1">
-              <UserInfo fullName={user?.full_name} email={user?.email} />
+              <UserInfo fullName={displayName} email={displayEmail} />
             </DropdownMenuLabel>
             <RouterLink to="/settings" onClick={handleMenuClick}>
+
               <DropdownMenuItem className="gap-2 font-bold text-xs hover:bg-amber-100 cursor-pointer rounded p-2 text-[#27272A]">
                 <Settings className="h-4 w-4" />
                 <span>User Settings</span>
