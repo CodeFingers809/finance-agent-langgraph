@@ -51,12 +51,15 @@ function SetupOrganization() {
   const handleSetupOrgWithId = async (orgId: string) => {
     setLoading(true)
     try {
+      console.log("Setting active organization:", orgId)
       // Set active org to resolve choose-organization task
-      await setActive({ organization: orgId })
-      await new Promise(resolve => setTimeout(resolve, 200))
+      const result = await setActive({ organization: orgId })
+      console.log("setActive result:", result)
+      await new Promise(resolve => setTimeout(resolve, 500))
       toast.success("Organization selected!")
       navigate({ to: "/chat", replace: true })
     } catch (err: any) {
+      console.error("Failed to set active org:", err)
       const msg = err?.message || "Failed to select organization. Please try again."
       toast.error(msg)
       setLoading(false)
