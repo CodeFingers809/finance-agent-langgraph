@@ -80,8 +80,8 @@ function Login() {
   const navigate = useNavigate()
   const { isSignedIn } = useAuth()
 
-  const { isLoaded, signIn, setActive } = useSignIn()
-  const { signOut } = useClerk()
+  const { isLoaded, signIn } = useSignIn()
+  const { signOut, setActive } = useClerk()
   const [loading, setLoading] = useState(false)
 
   const form = useForm<FormData>({

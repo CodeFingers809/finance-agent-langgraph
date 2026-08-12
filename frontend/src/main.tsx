@@ -84,23 +84,22 @@ function ClerkTokenBridge({
     // If Clerk never loads (adblocker/extension blocked), don't leave users on a
     // blank page forever. Wait a short timeout, then render the app without a
     // Clerk token so the UI can still show (some features will require auth).
-    const [allowRender, setAllowRender] = useState<boolean>(false);
+    const [timedOut, setTimedOut] = useState<boolean>(false);
     useEffect(() => {
         if (isLoaded) {
-            setAllowRender(true);
             return;
         }
         const id = setTimeout(() => {
             console.warn(
-                "Clerk did not become ready within timeout — rendering fallback UI",
+                "Clerk did not load within 5s — rendering UI with fallback auth",
             );
-            setAllowRender(true);
+            setTimedOut(true);
             (globalThis as any).___clerkTokenBridgeTimedOut = true;
         }, 5000);
         return () => clearTimeout(id);
     }, [isLoaded]);
 
-    if (!isLoaded && !allowRender) return null;
+    if (!isLoaded && !timedOut) return null;
     return <>{children}</>;
 }
 

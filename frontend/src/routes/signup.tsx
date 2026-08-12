@@ -58,8 +58,8 @@ export const Route = createFileRoute("/signup")({
 
 function SignUp() {
   const navigate = useNavigate()
-  const { isLoaded, signUp, setActive } = useSignUp()
-  const { signOut } = useClerk()
+  const { isLoaded, signUp } = useSignUp()
+  const { signOut, setActive } = useClerk()
   const { isSignedIn } = useAuth()
   const [loading, setLoading] = useState(false)
 
