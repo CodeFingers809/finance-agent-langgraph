@@ -669,8 +669,10 @@ function ChatPage() {
       setIsThinkingToolsActive(false)
       abortControllerRef.current = null
       fetchQuotaStatus()
+      window.dispatchEvent(new Event("quota-updated"))
     }
   }
+
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -949,24 +951,15 @@ function ChatPage() {
                     </div>
                   )}
 
-                {/* Main Message Text Card */}
-                <div
-                  className={`relative group rounded-xl p-4 border-2 border-[#27272A] ${
-                    m.sender === "user"
-                      ? "bg-[#2563EB] text-white font-medium shadow-[2.5px_2.5px_0px_#27272A]"
-                      : "bg-white text-[#27272A] shadow-[3px_3px_0px_#27272A]"
-                  }`}
-                >
-                  {m.sender === "user" ? (
-                    <div className="whitespace-pre-wrap leading-relaxed text-xs md:text-sm font-medium">
-                      {m.content}
-                    </div>
-                  ) : (
-                    <MarkdownRenderer content={formattedContent} />
-                  )}
-                </div>
+                {/* Render Chart Artifacts ON TOP of AI response */}
+                <ChartArtifacts
+                  priceChart={m.priceChart}
+                  growthChart={m.growthChart}
+                  analystChart={m.analystChart}
+                  fiiDiiChart={m.fiiDiiChart}
+                />
 
-                {/* HRP Portfolio Allocation Table */}
+                {/* HRP Portfolio Allocation Table ON TOP of AI response */}
                 {m.hrp_table?.symbols && (
                   <div className="bg-white border-2 border-[#27272A] shadow-[3px_3px_0px_#27272A] rounded-lg p-4 space-y-3 text-[#27272A] w-full">
                     <div className="flex items-center gap-2 border-b-2 border-[#27272A] pb-2">
@@ -1003,13 +996,23 @@ function ChatPage() {
                   </div>
                 )}
 
-                {/* Render Chart Artifacts when message metadata contains priceChart, growthChart, analystChart, or fiiDiiChart */}
-                <ChartArtifacts
-                  priceChart={m.priceChart}
-                  growthChart={m.growthChart}
-                  analystChart={m.analystChart}
-                  fiiDiiChart={m.fiiDiiChart}
-                />
+                {/* Main Message Text Card */}
+                <div
+                  className={`relative group rounded-xl p-4 border-2 border-[#27272A] ${
+                    m.sender === "user"
+                      ? "bg-[#2563EB] text-white font-medium shadow-[2.5px_2.5px_0px_#27272A]"
+                      : "bg-white text-[#27272A] shadow-[3px_3px_0px_#27272A]"
+                  }`}
+                >
+                  {m.sender === "user" ? (
+                    <div className="whitespace-pre-wrap leading-relaxed text-xs md:text-sm font-medium">
+                      {m.content}
+                    </div>
+                  ) : (
+                    <MarkdownRenderer content={formattedContent} />
+                  )}
+                </div>
+
               </div>
 
               {/* Agent Message Action Buttons (Sticky Right Side: 4 vertical stacked buttons) */}

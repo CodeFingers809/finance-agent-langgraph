@@ -21,19 +21,31 @@ import {
   Building2,
 } from "lucide-react"
 
-// --- Helper Formatters ---
+// --- Helper Formatters for Indian Financial System ---
 const formatCurrency = (val: number) => {
   if (val === undefined || val === null) return "₹0"
-  if (Math.abs(val) >= 1_000_000) return `₹${(val / 1_000_000).toFixed(1)}M`
-  if (Math.abs(val) >= 1_000) return `₹${(val / 1_000).toFixed(1)}k`
+  const abs = Math.abs(val)
+  if (abs >= 10_000_000) return `₹${(val / 10_000_000).toLocaleString("en-IN", { maximumFractionDigits: 2 })} Cr`
+  if (abs >= 100_000) return `₹${(val / 100_000).toLocaleString("en-IN", { maximumFractionDigits: 2 })} L`
   return `₹${val.toLocaleString("en-IN")}`
+}
+
+const formatNumberIN = (val: number) => {
+  if (val === undefined || val === null) return "0"
+  return val.toLocaleString("en-IN")
+}
+
+const formatCrores = (val: number) => {
+  if (val === undefined || val === null) return "0 Cr"
+  return `${val.toLocaleString("en-IN")} Cr`
 }
 
 const formatVolume = (val: number) => {
   if (!val) return "0"
-  if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(1)}M`
+  if (val >= 10_000_000) return `${(val / 10_000_000).toFixed(2)} Cr`
+  if (val >= 100_000) return `${(val / 100_000).toFixed(2)} L`
   if (val >= 1_000) return `${(val / 1_000).toFixed(1)}k`
-  return val.toString()
+  return val.toLocaleString("en-IN")
 }
 
 // ==========================================
@@ -131,7 +143,7 @@ export function PriceChartComponent({ symbol, period, points = [] }: PriceChartP
               yAxisId="price"
               domain={["auto", "auto"]}
               tick={{ fontSize: 10, fill: "#52525B" }}
-              tickFormatter={(v) => `₹${v}`}
+              tickFormatter={(v) => `₹${formatNumberIN(v)}`}
               tickLine={false}
             />
             <YAxis
@@ -151,12 +163,12 @@ export function PriceChartComponent({ symbol, period, points = [] }: PriceChartP
                         📅 {data.date}
                       </div>
                       <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 pt-0.5 text-[#27272A]">
-                        <span>Close: <strong className="text-[#2563EB]">₹{data.close}</strong></span>
-                        <span>Open: ₹{data.open}</span>
-                        <span>High: ₹{data.high}</span>
-                        <span>Low: ₹{data.low}</span>
+                        <span>Close: <strong className="text-[#2563EB]">₹{formatNumberIN(data.close)}</strong></span>
+                        <span>Open: ₹{formatNumberIN(data.open)}</span>
+                        <span>High: ₹{formatNumberIN(data.high)}</span>
+                        <span>Low: ₹{formatNumberIN(data.low)}</span>
                         <span className="col-span-2 text-gray-500 pt-0.5">
-                          Vol: {data.volume?.toLocaleString()}
+                          Vol: {formatVolume(data.volume)}
                         </span>
                       </div>
                     </div>
@@ -264,7 +276,7 @@ export function QuarterlyGrowthComponent({
             <YAxis
               yAxisId="amount"
               tick={{ fontSize: 10, fill: "#52525B" }}
-              tickFormatter={(v) => `₹${v}`}
+              tickFormatter={(v) => formatCurrency(v)}
               tickLine={false}
             />
             <YAxis
@@ -284,8 +296,8 @@ export function QuarterlyGrowthComponent({
                         📊 {d.quarter}
                       </div>
                       <div className="space-y-0.5 text-[#27272A]">
-                        <div>Revenue: <strong className="text-[#2563EB]">₹{d.revenue}</strong></div>
-                        <div>Net Income: <strong className="text-emerald-600">₹{d.netIncome}</strong></div>
+                        <div>Revenue: <strong className="text-[#2563EB]">{formatCurrency(d.revenue)}</strong></div>
+                        <div>Net Income: <strong className="text-emerald-600">{formatCurrency(d.netIncome)}</strong></div>
                         <div>YoY Growth: <strong className="text-amber-600">{d.yoyGrowthPct}%</strong></div>
                         <div>QoQ Growth: <strong className="text-purple-600">{d.qoqGrowthPct}%</strong></div>
                       </div>
@@ -372,7 +384,7 @@ export function AnalystTargetComponent({
   const isPositiveUpside = upsidePct >= 0
 
   return (
-    <div className="bg-white border-2 border-[#27272A] shadow-[3px_3px_0px_#27272A] rounded-xl p-4 space-y-3 my-3">
+    <div className="bg-[#FFFFFF] border-2 border-[#27272A] shadow-[3px_3px_0px_#27272A] rounded-xl p-4 space-y-3 my-3">
       {/* Header */}
       <div className="flex items-center justify-between border-b-2 border-[#27272A] pb-3">
         <div className="flex items-center gap-2">
@@ -399,7 +411,7 @@ export function AnalystTargetComponent({
             }`}
           >
             Upside: {isPositiveUpside ? "+" : ""}
-            {upsidePct.toFixed(1)}% vs Current (₹{currentPrice})
+            {upsidePct.toFixed(1)}% vs Current (₹{formatNumberIN(currentPrice)})
           </div>
         </div>
       </div>
@@ -416,7 +428,7 @@ export function AnalystTargetComponent({
             />
             <YAxis
               tick={{ fontSize: 10, fill: "#52525B" }}
-              tickFormatter={(v) => `₹${v}`}
+              tickFormatter={(v) => `₹${formatNumberIN(v)}`}
               domain={["auto", "auto"]}
               tickLine={false}
             />
@@ -430,8 +442,8 @@ export function AnalystTargetComponent({
                         🎯 {d.firm} ({d.date})
                       </div>
                       <div className="space-y-0.5 text-[#27272A]">
-                        <div>Target Price: <strong className="text-[#2563EB]">₹{d.targetPrice}</strong></div>
-                        <div>Current Price: ₹{d.currentPrice}</div>
+                        <div>Target Price: <strong className="text-[#2563EB]">₹{formatNumberIN(d.targetPrice)}</strong></div>
+                        <div>Current Price: ₹{formatNumberIN(d.currentPrice)}</div>
                       </div>
                     </div>
                   )
@@ -446,7 +458,7 @@ export function AnalystTargetComponent({
                 strokeDasharray="4 4"
                 strokeWidth={2}
                 label={{
-                  value: `Current Price: ₹${currentPrice}`,
+                  value: `Current Price: ₹${formatNumberIN(currentPrice)}`,
                   fill: "#EF4444",
                   fontSize: 10,
                   fontWeight: "bold",
@@ -516,10 +528,10 @@ export function FiiDiiFlowComponent({
 
         <div className="text-right font-mono">
           <div className="text-xs font-extrabold text-[#2563EB]">
-            FII Net: {totalFii >= 0 ? "+" : ""}{totalFii.toLocaleString()} Cr
+            FII Net: {totalFii >= 0 ? "+" : ""}{formatCrores(totalFii)}
           </div>
           <div className="text-xs font-extrabold text-amber-600">
-            DII Net: {totalDii >= 0 ? "+" : ""}{totalDii.toLocaleString()} Cr
+            DII Net: {totalDii >= 0 ? "+" : ""}{formatCrores(totalDii)}
           </div>
         </div>
       </div>
@@ -536,7 +548,7 @@ export function FiiDiiFlowComponent({
             />
             <YAxis
               tick={{ fontSize: 10, fill: "#52525B" }}
-              tickFormatter={(v) => `${v}`}
+              tickFormatter={(v) => `${formatNumberIN(v)} Cr`}
               tickLine={false}
             />
             <Tooltip
@@ -549,10 +561,10 @@ export function FiiDiiFlowComponent({
                         🏦 {d.date}
                       </div>
                       <div className="space-y-0.5 text-[#27272A]">
-                        <div>FII Net: <strong className="text-[#2563EB]">{d.fiiNetCr} Cr</strong></div>
-                        <div>DII Net: <strong className="text-amber-600">{d.diiNetCr} Cr</strong></div>
+                        <div>FII Net: <strong className="text-[#2563EB]">{formatCrores(d.fiiNetCr)}</strong></div>
+                        <div>DII Net: <strong className="text-amber-600">{formatCrores(d.diiNetCr)}</strong></div>
                         <div className="border-t border-gray-200 pt-1 font-bold">
-                          Combined: {d.netCombined} Cr
+                          Combined: {formatCrores(d.netCombined)}
                         </div>
                       </div>
                     </div>
@@ -581,6 +593,7 @@ export function FiiDiiFlowComponent({
     </div>
   )
 }
+
 
 // ==========================================
 // Parent ChartArtifacts Container
