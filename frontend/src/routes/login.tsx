@@ -98,7 +98,7 @@ function Login() {
   const [code, setCode] = useState("")
 
   const onSubmit = async (data: FormData) => {
-    if (loading || !isLoaded || !signIn) return
+    if (loading || !signIn) return
     setLoading(true)
     try {
       if (isSignedIn && signOut) {
@@ -157,7 +157,7 @@ function Login() {
 
   const handleVerifyFactor = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!isLoaded || !signIn || !code.trim() || loading) return
+    if (!signIn || !code.trim() || loading) return
     setLoading(true)
     try {
       let result

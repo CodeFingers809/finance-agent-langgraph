@@ -88,7 +88,7 @@ function SignUp() {
   })
 
   const onSubmit = async (data: FormData) => {
-    if (!isLoaded || loading) return
+    if (loading) return
     setLoading(true)
     try {
       if (isSignedIn) {
@@ -134,7 +134,7 @@ function SignUp() {
 
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!isLoaded || !code.trim() || loading) return
+    if (!code.trim() || loading) return
     setLoading(true)
     try {
       const result = await signUp.attemptEmailAddressVerification({
