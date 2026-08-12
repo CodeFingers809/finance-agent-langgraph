@@ -155,11 +155,13 @@ function Login() {
     } catch (err: unknown) {
       const msg = clerkErrorMessage(err, "Failed to log in")
       if (msg.toLowerCase().includes("already signed in") || msg.toLowerCase().includes("already_signed_in")) {
-        const sessionId = signIn.createdSessionId
-        if (sessionId) {
-          await setActive({ session: sessionId })
-          // Give Clerk time to update the session state before navigating
-          await new Promise(resolve => setTimeout(resolve, 500))
+        if (signIn) {
+          const sessionId = signIn.createdSessionId
+          if (sessionId) {
+            await setActive({ session: sessionId })
+            // Give Clerk time to update the session state before navigating
+            await new Promise(resolve => setTimeout(resolve, 500))
+          }
         }
         toast.success("Successfully logged in!")
         navigate({ to: "/chat", replace: true })
@@ -204,9 +206,13 @@ function Login() {
     } catch (err: unknown) {
       const msg = clerkErrorMessage(err, "Verification code invalid.")
       if (msg.toLowerCase().includes("already signed in") || msg.toLowerCase().includes("already_signed_in")) {
-        const sessionId = signIn.createdSessionId
-        if (sessionId) {
-          await setActive({ session: sessionId })
+        if (signIn) {
+          const sessionId = signIn.createdSessionId
+          if (sessionId) {
+            await setActive({ session: sessionId })
+            // Give Clerk time to update the session state before navigating
+            await new Promise(resolve => setTimeout(resolve, 500))
+          }
         }
         toast.success("Successfully authenticated!")
         navigate({ to: "/chat", replace: true })
