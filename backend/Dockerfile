@@ -61,8 +61,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --package app
 
+# Install redis-server for container-local quota caching
+RUN apt-get update && apt-get install -y redis-server && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app/backend/
 
-CMD ["granian", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--interface", "asgi", "app.main:app"]
-
-
+CMD ["sh", "-c", "redis-server --daemonize yes && granian --host 0.0.0.0 --port 8000 --workers 2 --interface asgi app.main:app"]

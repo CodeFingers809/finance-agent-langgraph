@@ -16,14 +16,8 @@ import { routeTree } from "./routeTree.gen";
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || "";
 
-const CLERK_DOMAIN =
-    (import.meta.env.VITE_CLERK_DOMAIN as string) ||
-    (typeof window !== "undefined" &&
-    window.location.hostname.includes("brnch.in")
-        ? "finance-agent.brnch.in"
-        : undefined);
-
 OpenAPI.BASE = import.meta.env.VITE_API_URL ?? "";
+
 // Clerk owns the session; ClerkTokenBridge (below) installs the real getToken
 // once the provider mounts. Until then there is no token to send.
 OpenAPI.TOKEN = async () => "";
@@ -102,11 +96,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             routerReplace={(to: string) =>
                 router.navigate({ to, replace: true })
             }
-            domain={CLERK_DOMAIN}
             signInFallbackRedirectUrl="/chat"
             signUpFallbackRedirectUrl="/chat"
             afterSignOutUrl="/login"
         >
+
+
             <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
                 <QueryClientProvider client={queryClient}>
                     <ClerkTokenBridge>
