@@ -2,10 +2,11 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import {
   createFileRoute,
   Link as RouterLink,
+  useNavigate,
 } from "@tanstack/react-router"
 
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { useClerk } from "@clerk/react"
@@ -56,6 +57,7 @@ export const Route = createFileRoute("/signup")({
 })
 
 function SignUp() {
+  const navigate = useNavigate()
   const { isLoaded, signUp, setActive } = useSignUp()
   const { signOut } = useClerk()
   const { isSignedIn } = useAuth()
@@ -63,6 +65,15 @@ function SignUp() {
 
   const [verifying, setVerifying] = useState(false)
   const [code, setCode] = useState("")
+
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      navigate({ to: "/chat", replace: true })
+    }
+  }, [isLoaded, isSignedIn, navigate])
+
+  if (isLoaded && isSignedIn) return null
+
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),

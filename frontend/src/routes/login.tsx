@@ -7,11 +7,10 @@ import {
   Link as RouterLink,
   useNavigate,
 } from "@tanstack/react-router"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
-import { ArrowRight, LogOut, User } from "lucide-react"
 
 import type { Body_login_login_access_token as AccessToken } from "@/client"
 import { AuthLayout } from "@/components/Common/AuthLayout"
@@ -24,10 +23,10 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { PasswordInput } from "@/components/ui/password-input"
 import useAuth from "@/hooks/useAuth"
+
 
 /**
  * Actionable messages for incomplete sign-in statuses.
@@ -79,7 +78,8 @@ export const Route = createFileRoute("/login")({
 
 function Login() {
   const navigate = useNavigate()
-  const { isSignedIn, clerkUser, logout } = useAuth()
+  const { isSignedIn } = useAuth()
+
   const { isLoaded, signIn, setActive } = useSignIn()
   const { signOut } = useClerk()
   const [loading, setLoading] = useState(false)
@@ -121,47 +121,14 @@ function Login() {
     }
   }
 
-  if (isSignedIn) {
-    const userEmail = clerkUser?.primaryEmailAddress?.emailAddress || "your active account"
-    return (
-      <AuthLayout>
-        <div className="flex flex-col gap-6 text-center py-4">
-          <div className="h-12 w-12 rounded-xl bg-amber-200 border-2 border-[#27272A] shadow-[2.5px_2.5px_0px_#27272A] flex items-center justify-center text-[#27272A] mx-auto">
-            <User className="h-6 w-6" />
-          </div>
-          <div className="space-y-1">
-            <h1 className="text-2xl font-extrabold text-[#27272A]">Already Signed In</h1>
-            <p className="text-xs text-[#52525B]">
-              You are currently logged in as <strong className="text-[#27272A]">{userEmail}</strong>.
-            </p>
-          </div>
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      navigate({ to: "/chat", replace: true })
+    }
+  }, [isLoaded, isSignedIn, navigate])
 
-          <div className="grid gap-3 pt-2">
-            <Button
-              type="button"
-              onClick={() => navigate({ to: "/chat" })}
-              className="neubrutal-btn-primary w-full h-11 text-xs gap-2"
-            >
-              Continue to Chat Terminal <ArrowRight className="h-4 w-4" />
-            </Button>
+  if (isLoaded && isSignedIn) return null
 
-            <Button
-              type="button"
-              variant="outline"
-              onClick={async () => {
-                setLoading(true)
-                await logout()
-              }}
-              disabled={loading}
-              className="neubrutal-btn w-full h-11 text-xs gap-2 bg-white text-[#27272A]"
-            >
-              <LogOut className="h-4 w-4" /> Sign Out to Switch Account
-            </Button>
-          </div>
-        </div>
-      </AuthLayout>
-    )
-  }
 
 
 
