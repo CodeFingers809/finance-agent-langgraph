@@ -108,8 +108,13 @@ def get_auth(request: Request, session: SessionDep) -> AuthContext:
             headers={"WWW-Authenticate": "Bearer"},
         )
     user = _sync_user(session, claims)
+
+    # Reactivate users that might have been deactivated; Clerk is the source of truth
     if not user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+        user.is_active = True
+        session.add(user)
+        session.commit()
+
     _ensure_org(session, claims.org_id)
     return AuthContext(user=user, org_id=claims.org_id, org_role=claims.org_role)
 

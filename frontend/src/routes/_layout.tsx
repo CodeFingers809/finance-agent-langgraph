@@ -1,4 +1,4 @@
-import { useClerk, useOrganization, useOrganizationList } from "@clerk/react"
+import { useOrganization, useOrganizationList } from "@clerk/react"
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router"
 import { useEffect } from "react"
 
@@ -6,6 +6,7 @@ import { HeaderControls } from "@/components/Common/HeaderControls"
 import AppSidebar from "@/components/Sidebar/AppSidebar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import useAuth from "@/hooks/useAuth"
+import { useCheckPendingTasks } from "@/hooks/useCheckPendingTasks"
 
 // No beforeLoad auth check: it runs before React mounts, so the Clerk token
 // bridge isn't installed yet and any API call from here 401s -- which used to
@@ -20,30 +21,19 @@ export const Route = createFileRoute("/_layout")({
 function Layout() {
   const navigate = useNavigate()
   const { isLoaded, isSignedIn } = useAuth()
-  const { session } = useClerk()
   const { organization } = useOrganization()
   const { userMemberships, setActive } = useOrganizationList({
     userMemberships: { infinite: true },
   })
+
+  // Check for pending tasks and redirect if needed
+  useCheckPendingTasks()
 
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
       navigate({ to: "/login", replace: true })
     }
   }, [isLoaded, isSignedIn, navigate])
-
-  // Check for pending tasks (e.g., choose-organization) and redirect to setup
-  useEffect(() => {
-    if (isLoaded && isSignedIn && session) {
-      // Tasks are stored at session.user.unsafeMetadata.tasks (v2 claims)
-      const metadata = session.user?.unsafeMetadata as any
-      const tasks = metadata?.tasks || []
-      if (Array.isArray(tasks) && tasks.length > 0) {
-        console.debug("Pending tasks detected, redirecting to setup-organization:", tasks)
-        navigate({ to: "/setup-organization", replace: true })
-      }
-    }
-  }, [isLoaded, isSignedIn, session, navigate])
 
   // Activate the user's first org so org-scoped requests carry an org_id.
   useEffect(() => {
