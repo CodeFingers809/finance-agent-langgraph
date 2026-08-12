@@ -125,11 +125,10 @@ function Login() {
         const sessionId = result.createdSessionId || signIn.createdSessionId
         if (sessionId) {
           await setActive({ session: sessionId })
-          // Give Clerk time to update the session state before navigating
-          await new Promise(resolve => setTimeout(resolve, 500))
         }
         toast.success("Successfully logged in!")
-        navigate({ to: "/chat", replace: true })
+        // Use hard redirect to ensure page loads with fresh Clerk session
+        window.location.href = "/chat"
       } else if (
         result.status === "needs_first_factor" ||
         result.status === "needs_second_factor" ||
@@ -164,7 +163,8 @@ function Login() {
           }
         }
         toast.success("Successfully logged in!")
-        navigate({ to: "/chat", replace: true })
+        // Use hard redirect to ensure page loads with fresh Clerk session
+        window.location.href = "/chat"
         return
       }
       toast.error(msg)
@@ -195,11 +195,10 @@ function Login() {
         const sessionId = result.createdSessionId || signIn.createdSessionId
         if (sessionId) {
           await setActive({ session: sessionId })
-          // Give Clerk time to update the session state before navigating
-          await new Promise(resolve => setTimeout(resolve, 500))
         }
         toast.success("Successfully authenticated!")
-        navigate({ to: "/chat", replace: true })
+        // Use hard redirect to ensure page loads with fresh Clerk session
+        window.location.href = "/chat"
       } else {
         toast.error(`Verification status: ${result.status}`)
       }
@@ -210,12 +209,11 @@ function Login() {
           const sessionId = signIn.createdSessionId
           if (sessionId) {
             await setActive({ session: sessionId })
-            // Give Clerk time to update the session state before navigating
-            await new Promise(resolve => setTimeout(resolve, 500))
           }
         }
         toast.success("Successfully authenticated!")
-        navigate({ to: "/chat", replace: true })
+        // Use hard redirect to ensure page loads with fresh Clerk session
+        window.location.href = "/chat"
         return
       }
       toast.error(msg)
