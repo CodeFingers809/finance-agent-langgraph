@@ -94,6 +94,9 @@ function Login() {
     },
   })
 
+  const [verifying, setVerifying] = useState(false)
+  const [code, setCode] = useState("")
+
   const onSubmit = async (data: FormData) => {
     if (loading || !isLoaded || !signIn) return
     setLoading(true)
@@ -106,16 +109,66 @@ function Login() {
         password: data.password,
       })
 
-      if (result.status !== "complete") {
-        toast.error(SIGN_IN_STEP_MESSAGES[result.status ?? ""] ?? `Sign-in needs an extra step (${result.status}).`)
-        return
+      if (result.status === "complete") {
+        await setActive({ session: result.createdSessionId })
+        toast.success("Successfully logged in!")
+        navigate({ to: "/chat", replace: true })
+      } else if (
+        result.status === "needs_first_factor" ||
+        result.status === "needs_second_factor" ||
+        result.status === "needs_client_trust"
+      ) {
+        const emailFactor = (result.supportedFirstFactors as any[])?.find(
+          (f: any) => f.strategy === "email_code"
+        )
+        if (emailFactor && signIn.prepareFirstFactor) {
+          await signIn.prepareFirstFactor({
+            strategy: "email_code",
+            emailAddressId: emailFactor.emailAddressId,
+          })
+        }
+        setVerifying(true)
+        toast.info("Verification code required to authorize this device.")
+      } else {
+        toast.error(
+          SIGN_IN_STEP_MESSAGES[result.status ?? ""] ??
+            `Sign-in status: ${result.status}`
+        )
       }
-
-      await setActive({ session: result.createdSessionId })
-      toast.success("Successfully logged in!")
-      navigate({ to: "/chat", replace: true })
     } catch (err: unknown) {
       toast.error(clerkErrorMessage(err, "Failed to log in"))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleVerifyFactor = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!isLoaded || !signIn || !code.trim() || loading) return
+    setLoading(true)
+    try {
+      let result
+      if (signIn.status === "needs_second_factor") {
+        result = await signIn.attemptSecondFactor({
+          strategy: "totp",
+          code: code.trim(),
+        })
+      } else {
+        result = await signIn.attemptFirstFactor({
+          strategy: "email_code",
+          code: code.trim(),
+        })
+      }
+
+      if (result.status === "complete") {
+        await setActive({ session: result.createdSessionId })
+        toast.success("Successfully authenticated!")
+        navigate({ to: "/chat", replace: true })
+      } else {
+        toast.error(`Verification status: ${result.status}`)
+      }
+    } catch (err: unknown) {
+      toast.error(clerkErrorMessage(err, "Verification code invalid."))
     } finally {
       setLoading(false)
     }
@@ -128,6 +181,50 @@ function Login() {
   }, [isLoaded, isSignedIn, navigate])
 
   if (isLoaded && isSignedIn) return null
+
+  if (verifying) {
+    return (
+      <AuthLayout>
+        <form onSubmit={handleVerifyFactor} className="flex flex-col gap-6">
+          <div className="flex flex-col items-center gap-2 text-center">
+            <h1 className="text-2xl font-bold">Device Verification</h1>
+            <p className="text-xs text-[#52525B]">
+              Enter the verification code sent to your email or authentication app.
+            </p>
+          </div>
+
+          <div className="grid gap-4">
+            <div className="flex flex-col gap-2">
+              <label htmlFor="login-code-input" className="text-xs font-bold text-[#27272A]">
+                Verification Code
+              </label>
+              <Input
+                id="login-code-input"
+                placeholder="123456"
+                type="text"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                required
+              />
+            </div>
+
+            <LoadingButton type="submit" className="w-full" loading={loading}>
+              Authorize & Sign In
+            </LoadingButton>
+
+            <button
+              type="button"
+              onClick={() => setVerifying(false)}
+              className="text-xs text-center text-[#52525B] hover:underline cursor-pointer"
+            >
+              Back to Password Sign In
+            </button>
+          </div>
+        </form>
+      </AuthLayout>
+    )
+  }
+
 
 
 
