@@ -154,14 +154,19 @@ async def create_organization(
             )
 
         # Add the user as admin to the newly created org
-        await clerk_request(
-            "POST",
-            f"/organizations/{org_id}/memberships",
-            json={
-                "user_id": auth.user.clerk_user_id,
-                "role": "org:admin",
-            },
-        )
+        try:
+            await clerk_request(
+                "POST",
+                f"/organizations/{org_id}/memberships",
+                json={
+                    "user_id": auth.user.clerk_user_id,
+                    "role": "org:admin",
+                },
+            )
+        except ClerkAPIError as e:
+            # If user is already a member (webhook got there first), that's OK - continue
+            if "already" not in e.detail.lower() and "member" not in e.detail.lower():
+                raise
 
         # Sync to local DB
         if not session.get(Organization, org_id):

@@ -117,7 +117,8 @@ function SetupOrganization() {
       // Set the created organization as active to resolve any pending tasks
       if (org.id) {
         await setActive({ organization: org.id })
-        await new Promise(resolve => setTimeout(resolve, 200))
+        // Refresh user to pick up new org membership
+        await new Promise(resolve => setTimeout(resolve, 500))
         toast.success("Organization created successfully!")
         navigate({ to: "/chat", replace: true })
       }
@@ -126,7 +127,6 @@ function SetupOrganization() {
         err?.message ||
         "Failed to create organization. Please try again."
       toast.error(msg)
-    } finally {
       setLoading(false)
     }
   }
