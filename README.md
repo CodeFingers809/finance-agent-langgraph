@@ -79,23 +79,34 @@ The system features real-time Server-Sent Events (SSE) streaming, persistent too
 - **Security Headers Middleware**: Enforces `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection`, `Referrer-Policy`, and `Content-Security-Policy`.
 - **Parameterized SQL**: All database operations use `SQLModel` / `SQLAlchemy` ORM parameterization, eliminating SQL injection vectors.
 
-### Research Mode (Multi-Analyst Hedge Fund Architecture)
+### Research Mode Architecture (`backend/app/agent/research_graph.py`)
 
 ```mermaid
-stateDiagram-v2
-    [*] --> TechnicalAnalyst: Start Research Request
-    TechnicalAnalyst --> FundamentalAnalyst: Technical & Momentum Analysis
-    FundamentalAnalyst --> VolatilityAnalyst: Fundamental & Financials Analysis
-    VolatilityAnalyst --> DefensiveAnalyst: Volatility & High-Risk Evaluation
-    DefensiveAnalyst --> Synthesizer: Defensive & Low-Risk Evaluation
-    Synthesizer --> ReportOutput: Consolidate Consensus & Generate Report
-    ReportOutput --> [*]
+flowchart TD
+    START([START]) --> InitVars["Initialize State<br/>(iteration = 1, max_iterations = 2, is_satisfied = False)"]
+    InitVars --> LoopCheck{"iteration <= 2 AND<br/>not is_satisfied?"}
+    
+    LoopCheck -- "Yes" --> PlannerLLM["Planner LLM<br/>(PLANNER_SYSTEM_PROMPT + Memory)"]
+    PlannerLLM --> ParseJSON["Parse JSON Decision<br/>(is_satisfied, reasoning, tool_calls)"]
+    ParseJSON --> CheckBreak{"is_satisfied (and iter > 1)<br/>OR no tool_calls?"}
+    
+    CheckBreak -- "Yes" --> SynthesisPhase
+    CheckBreak -- "No" --> FanOut["Fan-Out: asyncio.gather<br/>(Execute 1-4 tools in parallel)"]
+    
+    FanOut --> FanIn["Fan-In: Consolidate outputs<br/>into gathered_context memory"]
+    FanIn --> IncrementIter["Increment iteration<br/>(iteration += 1)"]
+    IncrementIter --> PacingSleep["asyncio.sleep(6.1s)<br/>(10 RPM Rate-Limit Cap)"]
+    PacingSleep --> LoopCheck
+    
+    LoopCheck -- "No" --> SynthesisPhase["Synthesis LLM Stream<br/>(Hedge-Fund Report Prompt)"]
+    SynthesisPhase --> END([END])
 ```
 
-- **Exclusive to GPT-5.6 Luna**: Granular LangGraph StateGraph with 4 specialist analyst personas (short-term technical, long-term fundamental, high-risk/volatility, low-risk/defensive).
+- **Exclusive to GPT-5.6 Luna**: Iterative research loop with automated decision planning, parallel tool execution, context consolidation, rate-limit pacing, and hedge-fund style synthesis streaming.
 - **Strict Daily/Hourly Quota**: Dedicated research report quota tracking per user.
-- **Multi-Tool Analysis**: Each analyst runs financial tools in parallel (price metrics, technicals, fundamentals, web search) to inform specialized perspective.
-- **Structured Output**: Final synthesis as detailed markdown report with labeled analyst perspectives, key risk/opportunity highlights, and actionable recommendation with conviction level.
+- **Multi-Tool Parallel Execution**: Executes 1-4 financial tools in parallel (`asyncio.gather`) per planning iteration.
+- **Structured Output**: Final synthesis streams a detailed markdown report with executive summaries, quantitative analysis, key risk/opportunity highlights, and actionable recommendations.
+
 
 ### Production Storage & Native PostgreSQL Persistence
 - **Native PostgreSQL 16**: Production host runs PostgreSQL 16 as a native `systemd` service (`postgresql.service`), persisting data in host disk `/var/lib/pgsql/data`.
