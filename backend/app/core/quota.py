@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 import redis
@@ -6,6 +7,8 @@ from sqlmodel import Session
 
 from app.core.config import settings
 from app.models import User
+
+logger = logging.getLogger(__name__)
 
 # Deprecated: UserQuota SQLModel table is preserved in database schema for backward compatibility,
 # but active daily quota rate-limiting is now Redis-backed (`quota:{user_id}:{utc_date}:{tier}`).
@@ -17,7 +20,9 @@ def get_sync_redis() -> redis.Redis:
     """Return singleton synchronous Redis client for rate limiting."""
     global _sync_redis_client
     if _sync_redis_client is None:
-        _sync_redis_client = redis.Redis.from_url(settings.REDIS_URL, decode_responses=True)
+        _sync_redis_client = redis.Redis.from_url(
+            settings.REDIS_URL, decode_responses=True, socket_connect_timeout=2
+        )
     return _sync_redis_client
 
 
@@ -53,27 +58,32 @@ def check_and_update_quota(
     limit = 3 if is_upgraded else 10
 
     key = f"quota:{str(user_id)}:{today_str}:{tier}"
-    r = get_sync_redis()
+    try:
+        r = get_sync_redis()
+        count = r.incr(key)
+        if count == 1:
+            ttl = get_seconds_to_utc_midnight()
+            r.expire(key, ttl, nx=True)
 
-    count = r.incr(key)
-    if count == 1:
-        ttl = get_seconds_to_utc_midnight()
-        r.expire(key, ttl, nx=True)
+        if count > limit:
+            r.decr(key)
+            if is_upgraded:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Daily limit reached for upgraded Gemini Flash model (3 requests/day).",
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Daily quota reached for standard Gemini Flash Lite model (10 requests/day).",
+                )
 
-    if count > limit:
-        r.decr(key)
-        if is_upgraded:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Daily limit reached for upgraded Gemini Flash model (3 requests/day).",
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Daily quota reached for standard Gemini Flash Lite model (10 requests/day).",
-            )
-
-    return {"status": "allowed", "count": count, "limit": limit}
+        return {"status": "allowed", "count": count, "limit": limit}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning("Redis quota check failed, executing fallback: %s", e)
+        return {"status": "allowed", "count": 0, "limit": limit}
 
 
 def check_research_mode_quota(
@@ -95,19 +105,23 @@ def check_research_mode_quota(
 
     today_str = datetime.now(UTC).strftime("%Y-%m-%d")
     key = f"quota:{str(user_id)}:{today_str}:research"
-    r = get_sync_redis()
+    try:
+        r = get_sync_redis()
+        count = r.incr(key)
+        if count == 1:
+            ttl = get_seconds_to_utc_midnight()
+            r.expire(key, ttl, nx=True)
 
-    count = r.incr(key)
-    if count == 1:
-        ttl = get_seconds_to_utc_midnight()
-        r.expire(key, ttl, nx=True)
-
-    if count > 1:
-        r.decr(key)
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Research mode limited to 1 report per day (resets at UTC midnight).",
-        )
+        if count > 1:
+            r.decr(key)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Research mode limited to 1 report per day (resets at UTC midnight).",
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning("Redis research quota check failed, executing fallback: %s", e)
 
 
 def get_user_quota_status(
@@ -149,15 +163,21 @@ def get_user_quota_status(
             }
 
     today_str = datetime.now(UTC).strftime("%Y-%m-%d")
-    r = get_sync_redis()
+    standard_count = 0
+    upgraded_count = 0
+    research_count = 0
 
-    std_val = r.get(f"quota:{str(user_id)}:{today_str}:standard")
-    upg_val = r.get(f"quota:{str(user_id)}:{today_str}:upgraded")
-    res_val = r.get(f"quota:{str(user_id)}:{today_str}:research")
+    try:
+        r = get_sync_redis()
+        std_val = r.get(f"quota:{str(user_id)}:{today_str}:standard")
+        upg_val = r.get(f"quota:{str(user_id)}:{today_str}:upgraded")
+        res_val = r.get(f"quota:{str(user_id)}:{today_str}:research")
 
-    standard_count = int(std_val) if std_val else 0
-    upgraded_count = int(upg_val) if upg_val else 0
-    research_count = int(res_val) if res_val else 0
+        standard_count = int(std_val) if std_val else 0
+        upgraded_count = int(upg_val) if upg_val else 0
+        research_count = int(res_val) if res_val else 0
+    except Exception as e:
+        logger.warning("Redis quota lookup failed, returning default status: %s", e)
 
     return {
         "standard_count": standard_count,
@@ -172,3 +192,4 @@ def get_user_quota_status(
         "seconds_until_next_allowed": get_seconds_to_utc_midnight(),
         "is_limited": standard_count >= 10,
     }
+
