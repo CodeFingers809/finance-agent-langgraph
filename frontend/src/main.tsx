@@ -103,6 +103,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                 router.navigate({ to, replace: true })
             }
             domain={CLERK_DOMAIN}
+            signInFallbackRedirectUrl="/chat"
+            signUpFallbackRedirectUrl="/chat"
+            afterSignOutUrl="/login"
         >
             <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
                 <QueryClientProvider client={queryClient}>
