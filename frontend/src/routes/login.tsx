@@ -125,10 +125,11 @@ function Login() {
         const sessionId = result.createdSessionId || signIn.createdSessionId
         if (sessionId) {
           await setActive({ session: sessionId })
+          toast.success("Successfully logged in!")
+          // Small delay to let Clerk state propagate through React
+          await new Promise(resolve => setTimeout(resolve, 200))
         }
-        toast.success("Successfully logged in!")
-        // Use hard redirect to ensure page loads with fresh Clerk session
-        window.location.href = "/chat"
+        navigate({ to: "/chat", replace: true })
       } else if (
         result.status === "needs_first_factor" ||
         result.status === "needs_second_factor" ||
@@ -163,8 +164,8 @@ function Login() {
           }
         }
         toast.success("Successfully logged in!")
-        // Use hard redirect to ensure page loads with fresh Clerk session
-        window.location.href = "/chat"
+        await new Promise(resolve => setTimeout(resolve, 200))
+        navigate({ to: "/chat", replace: true })
         return
       }
       toast.error(msg)
@@ -197,8 +198,8 @@ function Login() {
           await setActive({ session: sessionId })
         }
         toast.success("Successfully authenticated!")
-        // Use hard redirect to ensure page loads with fresh Clerk session
-        window.location.href = "/chat"
+        await new Promise(resolve => setTimeout(resolve, 200))
+        navigate({ to: "/chat", replace: true })
       } else {
         toast.error(`Verification status: ${result.status}`)
       }
@@ -212,8 +213,8 @@ function Login() {
           }
         }
         toast.success("Successfully authenticated!")
-        // Use hard redirect to ensure page loads with fresh Clerk session
-        window.location.href = "/chat"
+        await new Promise(resolve => setTimeout(resolve, 200))
+        navigate({ to: "/chat", replace: true })
         return
       }
       toast.error(msg)

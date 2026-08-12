@@ -103,11 +103,10 @@ function SignUp() {
         const sessionId = result.createdSessionId || signUp!.createdSessionId
         if (sessionId) {
           await setActive({ session: sessionId })
-          // Give Clerk time to update the session state before navigating
-          await new Promise(resolve => setTimeout(resolve, 500))
+          toast.success("Account created successfully!")
+          await new Promise(resolve => setTimeout(resolve, 200))
         }
-        toast.success("Account created successfully!")
-        window.location.href = "/chat"
+        navigate({ to: "/chat", replace: true })
       } else {
         await signUp!.prepareEmailAddressVerification({ strategy: "email_code" })
         setVerifying(true)
@@ -127,7 +126,8 @@ function SignUp() {
           await new Promise(resolve => setTimeout(resolve, 500))
         }
         toast.success("Account logged in!")
-        window.location.href = "/chat"
+        await new Promise(resolve => setTimeout(resolve, 200))
+        navigate({ to: "/chat", replace: true })
         return
       }
       toast.error(msg)
@@ -149,11 +149,10 @@ function SignUp() {
         const sessionId = result.createdSessionId || signUp!.createdSessionId
         if (sessionId) {
           await setActive({ session: sessionId })
-          // Give Clerk time to update the session state before navigating
-          await new Promise(resolve => setTimeout(resolve, 500))
+          toast.success("Account verified & logged in!")
+          await new Promise(resolve => setTimeout(resolve, 200))
         }
-        toast.success("Account verified & logged in!")
-        window.location.href = "/chat"
+        navigate({ to: "/chat", replace: true })
       } else {
         toast.error(`Verification status: ${result.status}`)
       }
@@ -169,7 +168,9 @@ function SignUp() {
           await setActive({ session: sessionId })
         }
         toast.success("Account verified & logged in!")
-        window.location.href = "/chat"
+        setTimeout(() => {
+          window.location.href = "/chat"
+        }, 1000)
         return
       }
       toast.error(msg)
