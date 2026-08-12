@@ -52,6 +52,20 @@ async def _ensure_personal_org(session: Session, clerk_user_id: str, email: str)
                 "created_by": clerk_user_id,
             },
         )
+        org_id = org.get("id")
+        if not org_id:
+            return
+
+        # Add the user as admin to the newly created org
+        await clerk_request(
+            "POST",
+            f"/organizations/{org_id}/memberships",
+            json={
+                "user_id": clerk_user_id,
+                "role": "org:admin",
+            },
+        )
+        logger.info("Created personal org %s for user %s", org_id, clerk_user_id)
     except ClerkAPIError:
         logger.exception("Could not ensure personal org for %s", clerk_user_id)
         return
