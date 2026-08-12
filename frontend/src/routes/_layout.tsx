@@ -35,8 +35,11 @@ function Layout() {
   // Check for pending tasks (e.g., choose-organization) and redirect to setup
   useEffect(() => {
     if (isLoaded && isSignedIn && session) {
-      const tasks = (session.user?.unsafeMetadata as any)?.tasks
+      // Tasks are stored at session.user.unsafeMetadata.tasks (v2 claims)
+      const metadata = session.user?.unsafeMetadata as any
+      const tasks = metadata?.tasks || []
       if (Array.isArray(tasks) && tasks.length > 0) {
+        console.debug("Pending tasks detected, redirecting to setup-organization:", tasks)
         navigate({ to: "/setup-organization", replace: true })
       }
     }

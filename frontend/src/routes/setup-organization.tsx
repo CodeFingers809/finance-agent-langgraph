@@ -41,6 +41,28 @@ function SetupOrganization() {
     }
   }, [user, navigate])
 
+  // Auto-submit when org is detected
+  useEffect(() => {
+    if (selectedOrgId && !loading) {
+      handleSetupOrgWithId(selectedOrgId)
+    }
+  }, [selectedOrgId])
+
+  const handleSetupOrgWithId = async (orgId: string) => {
+    setLoading(true)
+    try {
+      // Set active org to resolve choose-organization task
+      await setActive({ organization: orgId })
+      await new Promise(resolve => setTimeout(resolve, 200))
+      toast.success("Organization selected!")
+      navigate({ to: "/chat", replace: true })
+    } catch (err: any) {
+      const msg = err?.message || "Failed to select organization. Please try again."
+      toast.error(msg)
+      setLoading(false)
+    }
+  }
+
   const handleSetupOrg = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -48,11 +70,7 @@ function SetupOrganization() {
     try {
       // If user already has an org membership, just select it and move on
       if (selectedOrgId) {
-        // Set active org to resolve choose-organization task
-        await setActive({ organization: selectedOrgId })
-        await new Promise(resolve => setTimeout(resolve, 200))
-        toast.success("Organization selected!")
-        navigate({ to: "/chat", replace: true })
+        await handleSetupOrgWithId(selectedOrgId)
         return
       }
 

@@ -67,6 +67,28 @@ async def get_my_organization(
         }
 
     org = session.get(Organization, auth.org_id)
+    org_name = org.name if org else None
+    org_slug = org.slug if org else None
+
+    # If org not in local DB, fetch from Clerk to get its details
+    if not org:
+        try:
+            clerk_org = await clerk_request("GET", f"/organizations/{auth.org_id}")
+            org_name = clerk_org.get("name")
+            org_slug = clerk_org.get("slug")
+            # Sync to local DB for future requests
+            session.add(
+                Organization(
+                    id=auth.org_id,
+                    name=org_name or auth.org_id,
+                    slug=org_slug,
+                )
+            )
+            session.commit()
+        except ClerkAPIError:
+            # If Clerk fetch fails, at least return something with the org_id
+            logger.warning("Could not fetch org %s from Clerk", auth.org_id)
+
     members: list[dict[str, Any]] = []
     try:
         data = await clerk_request(
@@ -92,8 +114,8 @@ async def get_my_organization(
     return {
         "organization": {
             "id": auth.org_id,
-            "name": org.name if org else auth.org_id,
-            "slug": org.slug if org else None,
+            "name": org_name or auth.org_id,
+            "slug": org_slug,
         },
         "role": auth.org_role,
         "members": members,
