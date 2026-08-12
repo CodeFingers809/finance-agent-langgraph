@@ -137,7 +137,7 @@ async def create_organization(
         )
 
     try:
-        # Create org in Clerk
+        # Create org in Clerk (created_by automatically assigns caller as org:admin)
         org = await clerk_request(
             "POST",
             "/organizations",
@@ -152,21 +152,6 @@ async def create_organization(
                 status_code=502,
                 detail="Clerk returned no organization ID",
             )
-
-        # Add the user as admin to the newly created org
-        try:
-            await clerk_request(
-                "POST",
-                f"/organizations/{org_id}/memberships",
-                json={
-                    "user_id": auth.user.clerk_user_id,
-                    "role": "org:admin",
-                },
-            )
-        except ClerkAPIError as e:
-            # If user is already a member (webhook got there first), that's OK - continue
-            if "already" not in e.detail.lower() and "member" not in e.detail.lower():
-                raise
 
         # Sync to local DB
         if not session.get(Organization, org_id):
@@ -185,7 +170,9 @@ async def create_organization(
             "slug": org.get("slug"),
         }
     except ClerkAPIError as e:
+        logger.exception("Failed to create organization in Clerk for %s", auth.user.clerk_user_id)
         raise HTTPException(status_code=502, detail=f"Clerk error: {e.detail}") from e
+
 
 
 @router.get("/me/stats")

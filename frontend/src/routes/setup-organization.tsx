@@ -1,7 +1,8 @@
-import { useClerk } from "@clerk/react"
+import { useClerk, useOrganizationList } from "@clerk/react"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
+import { authFetch } from "@/lib/authFetch"
 import { AuthLayout } from "@/components/Common/AuthLayout"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Input } from "@/components/ui/input"
@@ -19,94 +20,53 @@ export const Route = createFileRoute("/setup-organization")({
 
 function SetupOrganization() {
   const navigate = useNavigate()
-  const { user, setActive } = useClerk()
+  const { setActive } = useClerk()
+  const { userMemberships, isLoaded: isOrgsLoaded } = useOrganizationList({
+    userMemberships: { infinite: true },
+  })
   const [orgName, setOrgName] = useState("")
   const [loading, setLoading] = useState(false)
-  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null)
 
   useEffect(() => {
-    // If user is not signed in, redirect to signup
-    if (!user) {
-      navigate({ to: "/signup", replace: true })
-      return
-    }
-
-    // Check if user already has an organization
-    if (user.organizationMemberships && user.organizationMemberships.length > 0) {
-      // User already has org(s) - auto-select first and go to chat
-      const firstOrg = user.organizationMemberships[0]
-      if (firstOrg.organization?.id) {
-        setSelectedOrgId(firstOrg.organization.id)
-        setLoading(true)
+    // If Clerk is loaded and user has at least 1 org, immediately redirect to /chat!
+    if (isOrgsLoaded && userMemberships?.data && userMemberships.data.length > 0) {
+      const firstOrgId = userMemberships.data[0].organization.id
+      if (setActive) {
+        setActive({ organization: firstOrgId })
       }
-    } else {
-      // User has NO orgs - show form to create one
-      setSelectedOrgId(null)
-    }
-  }, [user, navigate])
-
-  // Auto-submit when org is detected
-  useEffect(() => {
-    if (selectedOrgId && loading) {
-      handleSetupOrgWithId(selectedOrgId)
-    }
-  }, [selectedOrgId, loading])
-
-  const handleSetupOrgWithId = async (orgId: string) => {
-    setLoading(true)
-    try {
-      console.log("Setting active organization:", orgId)
-      // Set active org to resolve choose-organization task
-      const result = await setActive({ organization: orgId })
-      console.log("setActive result:", result)
-      await new Promise(resolve => setTimeout(resolve, 500))
-      toast.success("Organization selected!")
       navigate({ to: "/chat", replace: true })
-    } catch (err: any) {
-      console.error("Failed to set active org:", err)
-      // If user is already a member, that's fine - just navigate to chat
-      const msg = err?.message || ""
-      if (msg.includes("already a member")) {
-        console.log("User already member, navigating to chat")
-        navigate({ to: "/chat", replace: true })
-        return
-      }
-      toast.error(msg || "Failed to select organization. Please try again.")
-      setLoading(false)
     }
-  }
+  }, [isOrgsLoaded, userMemberships?.data, setActive, navigate])
 
   const handleSetupOrg = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // STRICT GUARD: Only create an org if all checks confirm user has NO orgs!
+    if (userMemberships?.data && userMemberships.data.length > 0) {
+      const firstOrgId = userMemberships.data[0].organization.id
+      if (setActive) {
+        await setActive({ organization: firstOrgId })
+      }
+      toast.info("You already belong to an organization.")
+      navigate({ to: "/chat", replace: true })
+      return
+    }
+
+    if (!orgName.trim() || loading) {
+      if (!orgName.trim()) toast.error("Organization name is required")
+      return
+    }
+
     setLoading(true)
     try {
-      // If user already has an org membership, just select it and move on
-      if (selectedOrgId) {
-        await handleSetupOrgWithId(selectedOrgId)
-        return
-      }
-
-      // Need to create new org
-      if (!orgName.trim()) {
-        toast.error("Organization name is required")
-        setLoading(false)
-        return
-      }
-
-      // Create a new organization with the provided name
-      const response = await fetch("/api/v1/organizations", {
+      const response = await authFetch("/organizations", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: orgName.trim(),
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: orgName.trim() }),
       })
 
       if (!response.ok) {
-        const error = await response.json()
+        const error = await response.json().catch(() => ({}))
         toast.error(error.detail || "Failed to create organization")
         setLoading(false)
         return
@@ -114,25 +74,32 @@ function SetupOrganization() {
 
       const org = await response.json()
 
-      // Set the created organization as active to resolve any pending tasks
-      if (org.id) {
+      if (org.id && setActive) {
         await setActive({ organization: org.id })
-        // Refresh user to pick up new org membership
-        await new Promise(resolve => setTimeout(resolve, 500))
         toast.success("Organization created successfully!")
         navigate({ to: "/chat", replace: true })
       }
     } catch (err: any) {
+
+
       const msg =
+        err?.body?.detail ||
         err?.message ||
         "Failed to create organization. Please try again."
+
+      if (msg.toLowerCase().includes("already") || msg.toLowerCase().includes("member")) {
+        // If user is already in an org, redirect to /chat
+        navigate({ to: "/chat", replace: true })
+        return
+      }
+
       toast.error(msg)
       setLoading(false)
     }
   }
 
-  // If org was detected and we're setting it active, show loading state
-  if (selectedOrgId && loading) {
+  // Show loading while checking org memberships
+  if (!isOrgsLoaded || (userMemberships?.data && userMemberships.data.length > 0)) {
     return (
       <AuthLayout>
         <div className="flex flex-col items-center justify-center gap-4 py-12">
@@ -144,6 +111,7 @@ function SetupOrganization() {
       </AuthLayout>
     )
   }
+
 
   return (
     <AuthLayout>
