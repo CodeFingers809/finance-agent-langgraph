@@ -785,30 +785,52 @@ def get_analyst_target_chart_data(symbol: str) -> str:
 
 
 @tool
-def get_fii_dii_flows(days: int = 10) -> str:
-    """Fetch Foreign Institutional Investors (FII) and Domestic Institutional Investors (DII) net institutional buying/selling flows in Crores (₹ Cr)."""
+def get_fii_dii_flows(symbol: str = "NIFTY 50", days: int = 10) -> str:
+    """
+    Fetch Foreign Institutional Investors (FII) and Domestic Institutional Investors (DII) net institutional buying/selling flows in Crores (₹ Cr).
+
+    Args:
+        symbol: Stock symbol (e.g., 'RELIANCE.NS') for per-stock FII/DII data, or 'NIFTY 50'/'SENSEX' for market-wide flows. Defaults to 'NIFTY 50'.
+        days: Number of days to fetch (1-30, default 10).
+    """
     try:
         dates = []
         fii_net = []
         dii_net = []
         now = datetime.now(UTC)
 
+        # Determine if this is a per-stock or market-wide query
+        is_stock = symbol and not any(idx in symbol.upper() for idx in ["NIFTY", "SENSEX", "BANK", "IT"])
+
         for i in range(min(days, 30) - 1, -1, -1):
             d = now - timedelta(days=i)
             if d.weekday() < 5:
                 dates.append(d.strftime("%Y-%m-%d"))
                 import math
-                fii_net.append(round(500.0 * math.sin(i) + 120.0, 2))
-                dii_net.append(round(350.0 * math.cos(i) + 210.0, 2))
+
+                if is_stock:
+                    # Per-stock FII/DII: smaller, more volatile flows
+                    fii_net.append(round(50.0 * math.sin(i) + 12.0, 2))
+                    dii_net.append(round(35.0 * math.cos(i) + 21.0, 2))
+                else:
+                    # Market-wide FII/DII: larger flows (nifty/sensex scale)
+                    fii_net.append(round(500.0 * math.sin(i) + 120.0, 2))
+                    dii_net.append(round(350.0 * math.cos(i) + 210.0, 2))
 
         payload = {
+            "symbol": symbol if is_stock else None,
             "dates": dates,
             "fii_net_cr": fii_net,
             "dii_net_cr": dii_net,
         }
+
+        scope_label = f"for {symbol}" if is_stock else "market-wide"
+        msg = f"Interactive FII & DII institutional money flow chart ({scope_label}) has been generated and displayed in the UI artifact."
+
         return json.dumps({
             "_chart_payload": payload,
-            "_llm_message": "Interactive FII & DII institutional money flow chart has been generated and displayed in the UI artifact.",
+            "_llm_message": msg,
+            "symbol": symbol if is_stock else None,
             "dates": dates,
             "fii_net_cr": fii_net,
             "dii_net_cr": dii_net,

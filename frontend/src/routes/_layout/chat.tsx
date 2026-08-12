@@ -240,6 +240,7 @@ function ChatPage() {
                       }
                     } else if (evt.type === "fii_dii_chart") {
                       fiiDiiChart = {
+                        symbol: evt.symbol || undefined,
                         dates: evt.dates,
                         fiiNetCr: evt.fii_net_cr,
                         diiNetCr: evt.dii_net_cr,

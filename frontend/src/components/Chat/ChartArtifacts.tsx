@@ -209,13 +209,16 @@ export function QuarterlyGrowthComponent({
 }: GrowthChartProps) {
   if (!quarters || quarters.length === 0) return null
 
-  const data = quarters.map((q, i) => ({
-    quarter: q,
-    revenue: revenue[i] ?? 0,
-    netIncome: netIncome[i] ?? 0,
-    yoyGrowthPct: yoyGrowthPct[i] ?? 0,
-    qoqGrowthPct: qoqGrowthPct[i] ?? 0,
-  }))
+  // Filter out zero/null values and keep only meaningful data points
+  const data = quarters
+    .map((q, i) => ({
+      quarter: q,
+      revenue: revenue[i] ?? 0,
+      netIncome: netIncome[i] ?? 0,
+      yoyGrowthPct: yoyGrowthPct[i] ?? 0,
+      qoqGrowthPct: qoqGrowthPct[i] ?? 0,
+    }))
+    .filter(d => d.revenue !== 0 || d.netIncome !== 0)
 
   const latestYoY = yoyGrowthPct[yoyGrowthPct.length - 1] ?? 0
   const latestRev = revenue[revenue.length - 1] ?? 0
@@ -469,12 +472,14 @@ export function AnalystTargetComponent({
 // 4. FiiDiiFlowComponent
 // ==========================================
 export interface FiiDiiChartProps {
+  symbol?: string
   dates?: string[]
   fiiNetCr?: number[]
   diiNetCr?: number[]
 }
 
 export function FiiDiiFlowComponent({
+  symbol,
   dates = [],
   fiiNetCr = [],
   diiNetCr = [],
@@ -501,10 +506,10 @@ export function FiiDiiFlowComponent({
           </div>
           <div>
             <h3 className="font-display font-extrabold text-sm text-[#27272A]">
-              FII & DII Institutional Money Flows
+              FII & DII Institutional Money Flows {symbol ? `(${symbol})` : ""}
             </h3>
             <p className="text-[11px] text-gray-500 font-mono">
-              Net Institutional Trading Activity (₹ Cr)
+              {symbol ? `Per-Stock Activity (₹ Cr)` : `Net Institutional Trading Activity (₹ Cr)`}
             </p>
           </div>
         </div>
