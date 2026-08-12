@@ -80,7 +80,17 @@ declare module "@tanstack/react-router" {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
+    <ClerkProvider
+      publishableKey={PUBLISHABLE_KEY}
+      routerPush={(to) => router.navigate({ to })}
+      routerReplace={(to) => router.navigate({ to, replace: true })}
+      domain={
+        typeof window !== "undefined" && window.location.hostname.endsWith("brnch.in")
+          ? "finance-agent.brnch.in"
+          : undefined
+      }
+    >
+
       <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
         <QueryClientProvider client={queryClient}>
           <ClerkTokenBridge>

@@ -100,9 +100,12 @@ function SignUp() {
       })
 
       if (result.status === "complete") {
-        await setActive({ session: result.createdSessionId })
+        const sessionId = result.createdSessionId || signUp.createdSessionId
+        if (sessionId) {
+          await setActive({ session: sessionId })
+        }
         toast.success("Account created successfully!")
-        window.location.href = "/chat"
+        navigate({ to: "/chat", replace: true })
       } else {
         await signUp.prepareEmailAddressVerification({ strategy: "email_code" })
         setVerifying(true)
@@ -130,12 +133,17 @@ function SignUp() {
       })
 
       if (result.status === "complete") {
-        await setActive({ session: result.createdSessionId })
-        toast.success("Account verified & created successfully!")
-        window.location.href = "/chat"
+        const sessionId = result.createdSessionId || signUp.createdSessionId
+        if (sessionId) {
+          await setActive({ session: sessionId })
+        }
+        toast.success("Account verified & logged in!")
+        navigate({ to: "/chat", replace: true })
       } else {
         toast.error(`Verification status: ${result.status}`)
       }
+
+
     } catch (err: any) {
       const msg =
         err?.errors?.[0]?.longMessage ||

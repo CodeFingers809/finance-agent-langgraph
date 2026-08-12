@@ -110,7 +110,10 @@ function Login() {
       })
 
       if (result.status === "complete") {
-        await setActive({ session: result.createdSessionId })
+        const sessionId = result.createdSessionId || signIn.createdSessionId
+        if (sessionId) {
+          await setActive({ session: sessionId })
+        }
         toast.success("Successfully logged in!")
         navigate({ to: "/chat", replace: true })
       } else if (
@@ -161,12 +164,17 @@ function Login() {
       }
 
       if (result.status === "complete") {
-        await setActive({ session: result.createdSessionId })
+        const sessionId = result.createdSessionId || signIn.createdSessionId
+        if (sessionId) {
+          await setActive({ session: sessionId })
+        }
         toast.success("Successfully authenticated!")
         navigate({ to: "/chat", replace: true })
       } else {
         toast.error(`Verification status: ${result.status}`)
       }
+
+
     } catch (err: unknown) {
       toast.error(clerkErrorMessage(err, "Verification code invalid."))
     } finally {
