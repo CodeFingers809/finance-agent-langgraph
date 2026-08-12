@@ -33,12 +33,15 @@ function SetupOrganization() {
 
     // Check if user already has an organization
     if (user.organizationMemberships && user.organizationMemberships.length > 0) {
-      // User already has an org, auto-select the first one and move to chat
+      // User already has org(s) - auto-select first and go to chat
       const firstOrg = user.organizationMemberships[0]
       if (firstOrg.organization?.id) {
         setSelectedOrgId(firstOrg.organization.id)
         setLoading(true)
       }
+    } else {
+      // User has NO orgs - show form to create one
+      setSelectedOrgId(null)
     }
   }, [user, navigate])
 

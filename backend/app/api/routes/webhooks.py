@@ -32,55 +32,27 @@ def _primary_email(data: dict[str, Any]) -> str | None:
     return addresses[0].get("email_address") if addresses else None
 
 
-async def _ensure_personal_org(session: Session, clerk_user_id: str, email: str) -> None:
-    """Create the user's personal org in Clerk if they have no membership.
+async def _ensure_personal_org(clerk_user_id: str) -> None:
+    """Check if user has any org membership. Don't create one automatically.
 
-    This is what "removed from an org -> back to your own org" relies on: Clerk
-    has no concept of a default org, so we materialize one.
+    Let the user explicitly create/join orgs via the setup-organization page or invites.
     """
     try:
         mems = await clerk_request(
             "GET", f"/users/{clerk_user_id}/organization_memberships?limit=10"
         )
-        if mems.get("data"):
-            return  # already belongs somewhere
-        org = await clerk_request(
-            "POST",
-            "/organizations",
-            json={
-                "name": f"{email.split('@')[0]}'s Workspace",
-                "created_by": clerk_user_id,
-            },
-        )
-        org_id = org.get("id")
-        if not org_id:
+        # If user already has memberships, do nothing
+        if isinstance(mems, list) and mems:
+            logger.info("User %s already has org memberships", clerk_user_id)
+            return
+        if isinstance(mems, dict) and mems.get("data"):
+            logger.info("User %s already has org memberships", clerk_user_id)
             return
 
-        # Add the user as admin to the newly created org
-        await clerk_request(
-            "POST",
-            f"/organizations/{org_id}/memberships",
-            json={
-                "user_id": clerk_user_id,
-                "role": "org:admin",
-            },
-        )
-        logger.info("Created personal org %s for user %s", org_id, clerk_user_id)
+        # User has no orgs - they will create one on setup-organization page
+        logger.info("User %s has no org memberships, will prompt to create one", clerk_user_id)
     except ClerkAPIError:
-        logger.exception("Could not ensure personal org for %s", clerk_user_id)
-        return
-
-    org_id = org.get("id")
-    if org_id and not session.get(Organization, org_id):
-        session.add(
-            Organization(
-                id=org_id,
-                name=org.get("name") or "Workspace",
-                slug=org.get("slug"),
-                is_personal=True,
-            )
-        )
-        session.commit()
+        logger.exception("Could not check org memberships for %s", clerk_user_id)
 
 
 @router.post("/clerk")
@@ -161,7 +133,7 @@ async def _handle_user_upsert(
     session.commit()
 
     if event_type == "user.created":
-        await _ensure_personal_org(session, clerk_user_id, email)
+        await _ensure_personal_org(clerk_user_id)
 
 
 def _handle_user_deleted(session: Session, data: dict[str, Any]) -> None:
@@ -266,6 +238,5 @@ async def _handle_membership_deleted(session: Session, data: dict[str, Any]) -> 
     user = session.exec(
         select(User).where(User.clerk_user_id == clerk_user_id)
     ).first()
-    email = user.email if user else user_data.get("identifier")
-    if email:
-        await _ensure_personal_org(session, clerk_user_id, email)
+    if user:
+        await _ensure_personal_org(clerk_user_id)

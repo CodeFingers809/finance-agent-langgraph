@@ -35,6 +35,19 @@ function Layout() {
     }
   }, [isLoaded, isSignedIn, navigate])
 
+  // If user has no org memberships, redirect to setup-organization
+  useEffect(() => {
+    if (
+      isLoaded &&
+      isSignedIn &&
+      userMemberships?.data &&
+      userMemberships.data.length === 0
+    ) {
+      navigate({ to: "/setup-organization", replace: true })
+      return
+    }
+  }, [isLoaded, isSignedIn, userMemberships?.data, navigate])
+
   // Activate the user's first org so org-scoped requests carry an org_id.
   useEffect(() => {
     if (

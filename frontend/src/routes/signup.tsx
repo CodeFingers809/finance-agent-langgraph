@@ -106,7 +106,7 @@ function SignUp() {
           toast.success("Account created successfully!")
           await new Promise(resolve => setTimeout(resolve, 200))
         }
-        navigate({ to: "/setup-organization", replace: true })
+        navigate({ to: "/chat", replace: true })
       } else {
         await signUp!.prepareEmailAddressVerification({ strategy: "email_code" })
         setVerifying(true)
@@ -127,7 +127,7 @@ function SignUp() {
         }
         toast.success("Account logged in!")
         await new Promise(resolve => setTimeout(resolve, 200))
-        navigate({ to: "/setup-organization", replace: true })
+        navigate({ to: "/chat", replace: true })
         return
       }
       toast.error(msg)
@@ -152,7 +152,7 @@ function SignUp() {
           toast.success("Account verified & logged in!")
           await new Promise(resolve => setTimeout(resolve, 200))
         }
-        navigate({ to: "/setup-organization", replace: true })
+        navigate({ to: "/chat", replace: true })
       } else {
         toast.error(`Verification status: ${result.status}`)
       }
