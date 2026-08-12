@@ -117,6 +117,15 @@ function SignUp() {
         err?.errors?.[0]?.message ||
         err?.message ||
         "Sign up failed. Please try again."
+      if (msg.toLowerCase().includes("already signed in") || msg.toLowerCase().includes("already_signed_in")) {
+        const sessionId = signUp.createdSessionId
+        if (sessionId) {
+          await setActive({ session: sessionId })
+        }
+        toast.success("Account logged in!")
+        navigate({ to: "/chat", replace: true })
+        return
+      }
       toast.error(msg)
     } finally {
       setLoading(false)
@@ -142,19 +151,27 @@ function SignUp() {
       } else {
         toast.error(`Verification status: ${result.status}`)
       }
-
-
     } catch (err: any) {
       const msg =
         err?.errors?.[0]?.longMessage ||
         err?.errors?.[0]?.message ||
         err?.message ||
         "Verification failed. Please check your code and try again."
+      if (msg.toLowerCase().includes("already signed in") || msg.toLowerCase().includes("already_signed_in")) {
+        const sessionId = signUp.createdSessionId
+        if (sessionId) {
+          await setActive({ session: sessionId })
+        }
+        toast.success("Account verified & logged in!")
+        navigate({ to: "/chat", replace: true })
+        return
+      }
       toast.error(msg)
     } finally {
       setLoading(false)
     }
   }
+
 
   if (verifying) {
     return (

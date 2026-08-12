@@ -139,7 +139,17 @@ function Login() {
         )
       }
     } catch (err: unknown) {
-      toast.error(clerkErrorMessage(err, "Failed to log in"))
+      const msg = clerkErrorMessage(err, "Failed to log in")
+      if (msg.toLowerCase().includes("already signed in") || msg.toLowerCase().includes("already_signed_in")) {
+        const sessionId = signIn.createdSessionId
+        if (sessionId) {
+          await setActive({ session: sessionId })
+        }
+        toast.success("Successfully logged in!")
+        navigate({ to: "/chat", replace: true })
+        return
+      }
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
@@ -173,14 +183,23 @@ function Login() {
       } else {
         toast.error(`Verification status: ${result.status}`)
       }
-
-
     } catch (err: unknown) {
-      toast.error(clerkErrorMessage(err, "Verification code invalid."))
+      const msg = clerkErrorMessage(err, "Verification code invalid.")
+      if (msg.toLowerCase().includes("already signed in") || msg.toLowerCase().includes("already_signed_in")) {
+        const sessionId = signIn.createdSessionId
+        if (sessionId) {
+          await setActive({ session: sessionId })
+        }
+        toast.success("Successfully authenticated!")
+        navigate({ to: "/chat", replace: true })
+        return
+      }
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
   }
+
 
   useEffect(() => {
     if (isLoaded && isSignedIn) {
