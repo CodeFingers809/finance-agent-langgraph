@@ -88,26 +88,26 @@ function SignUp() {
   })
 
   const onSubmit = async (data: FormData) => {
-    if (loading) return
+    if (loading || !signUp) return
     setLoading(true)
     try {
       if (isSignedIn) {
         await signOut()
       }
-      const result = await signUp.create({
+      const result = await signUp!.create({
         emailAddress: data.email,
         password: data.password,
       })
 
       if (result.status === "complete") {
-        const sessionId = result.createdSessionId || signUp.createdSessionId
+        const sessionId = result.createdSessionId || signUp!.createdSessionId
         if (sessionId) {
           await setActive({ session: sessionId })
         }
         toast.success("Account created successfully!")
         navigate({ to: "/chat", replace: true })
       } else {
-        await signUp.prepareEmailAddressVerification({ strategy: "email_code" })
+        await signUp!.prepareEmailAddressVerification({ strategy: "email_code" })
         setVerifying(true)
         toast.info("Verification code sent to your email!")
       }
@@ -118,7 +118,7 @@ function SignUp() {
         err?.message ||
         "Sign up failed. Please try again."
       if (msg.toLowerCase().includes("already signed in") || msg.toLowerCase().includes("already_signed_in")) {
-        const sessionId = signUp.createdSessionId
+        const sessionId = signUp!.createdSessionId
         if (sessionId) {
           await setActive({ session: sessionId })
         }
@@ -137,12 +137,12 @@ function SignUp() {
     if (!code.trim() || loading) return
     setLoading(true)
     try {
-      const result = await signUp.attemptEmailAddressVerification({
+      const result = await signUp!.attemptEmailAddressVerification({
         code: code.trim(),
       })
 
       if (result.status === "complete") {
-        const sessionId = result.createdSessionId || signUp.createdSessionId
+        const sessionId = result.createdSessionId || signUp!.createdSessionId
         if (sessionId) {
           await setActive({ session: sessionId })
         }
@@ -158,7 +158,7 @@ function SignUp() {
         err?.message ||
         "Verification failed. Please check your code and try again."
       if (msg.toLowerCase().includes("already signed in") || msg.toLowerCase().includes("already_signed_in")) {
-        const sessionId = signUp.createdSessionId
+        const sessionId = signUp!.createdSessionId
         if (sessionId) {
           await setActive({ session: sessionId })
         }
