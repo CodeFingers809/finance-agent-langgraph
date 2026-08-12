@@ -47,6 +47,20 @@ The system features real-time Server-Sent Events (SSE) streaming, persistent too
 - Constructs risk-optimal portfolios using graph-based Hierarchical Risk Parity clustering (`scipy.cluster.hierarchy`).
 - Avoids matrix inversion instabilities present in traditional Markowitz Mean-Variance Optimization, delivering robust asset weights during volatile market conditions.
 
+### 9. Research Report Generation & PDF Export
+- Generates full structured research reports with executive summaries, technical charts, risks, and conviction levels.
+- Supports client-side PDF export (`jspdf` + `html2canvas`) with clean font rendering, custom word spacing, and printable chart artifacts.
+
+### 10. Hourly Quota & Rate Limiting System
+- Enforces hourly rolling quota windows (`UserQuota`) to ensure fair API usage across standard and superuser tiers.
+- Resets usage automatically on sliding hour intervals with clear feedback in user headers.
+
+### 11. Real-Time Recharts Interactive Artifacts
+- Streams interactive `Recharts` graphs (FII/DII institutional flows, stock price trajectories, revenue growth, analyst target price distributions) live over SSE tool calls.
+
+### 12. Multi-Tenant Workspaces & Clerk Organization RBAC
+- Enterprise organization management powered by Clerk Auth, supporting member invitations, workspace switching, and organization-scoped data isolation.
+
 ---
 
 ## Architecture & Technical Choices
@@ -60,47 +74,61 @@ The system features real-time Server-Sent Events (SSE) streaming, persistent too
 - **Structured Tool Returns**: Tools output clean JSON strings directly to the model, preventing raw chart hallucination or context window bloat.
 
 ### Security, Rate Limiting & Auth
-- **JWT Authentication**: Password hashing using Argon2id (`passlib` + `argon2-cffi`) and OAuth2 bearer tokens.
-- **Rate Limiting**: IP and endpoint rate limits enforced via `SlowAPI`. Dual-tier daily model quotas (10 requests/day for standard tier, 999/day for superusers). Research Mode uses strict 1 report/day per user cap (independent of chat quotas).
+- **Clerk Authentication & RBAC**: Integrated Clerk identity management (`@clerk/react` + `clerk-backend-api` JWT session verification), replacing legacy password hashing with secure multi-tenant auth.
+- **Rate Limiting & Quotas**: Hourly sliding window quota tracking (`UserQuota`) enforced at API level. Dual-tier model quotas with granular 1-hour reset timestamps.
 - **Security Headers Middleware**: Enforces `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection`, `Referrer-Policy`, and `Content-Security-Policy`.
 - **Parameterized SQL**: All database operations use `SQLModel` / `SQLAlchemy` ORM parameterization, eliminating SQL injection vectors.
 
 ### Research Mode (Multi-Analyst Hedge Fund Architecture)
+
+```mermaid
+stateDiagram-v2
+    [*] --> TechnicalAnalyst: Start Research Request
+    TechnicalAnalyst --> FundamentalAnalyst: Technical & Momentum Analysis
+    FundamentalAnalyst --> VolatilityAnalyst: Fundamental & Financials Analysis
+    VolatilityAnalyst --> DefensiveAnalyst: Volatility & High-Risk Evaluation
+    DefensiveAnalyst --> Synthesizer: Defensive & Low-Risk Evaluation
+    Synthesizer --> ReportOutput: Consolidate Consensus & Generate Report
+    ReportOutput --> [*]
+```
+
 - **Exclusive to GPT-5.6 Luna**: Granular LangGraph StateGraph with 4 specialist analyst personas (short-term technical, long-term fundamental, high-risk/volatility, low-risk/defensive).
-- **Strict Daily Quota**: 1 research report per user per day (independent of standard/upgraded chat quotas).
+- **Strict Daily/Hourly Quota**: Dedicated research report quota tracking per user.
 - **Multi-Tool Analysis**: Each analyst runs financial tools in parallel (price metrics, technicals, fundamentals, web search) to inform specialized perspective.
 - **Structured Output**: Final synthesis as detailed markdown report with labeled analyst perspectives, key risk/opportunity highlights, and actionable recommendation with conviction level.
-- **Sequential Execution**: 4 analyst nodes run sequentially (~30s each), aggregator synthesizes final report (~15s). Parallelizable via `asyncio.gather()` for future optimization.
 
-### Production Storage & Persistence
-- **SQLite WAL Mode**: SQLite embedded database using Write-Ahead Logging for non-blocking concurrent reads.
-- **Host Volume Mounting**: Database file is mapped to a host volume (`-v /home/ec2-user/finance-agent/data:/app/backend/data`), guaranteeing zero data loss across container updates or service restarts.
+### Production Storage & Native PostgreSQL Persistence
+- **Native PostgreSQL 16**: Production host runs PostgreSQL 16 as a native `systemd` service (`postgresql.service`), persisting data in host disk `/var/lib/pgsql/data`.
+- **Zero-Loss Container Isolation**: Database runs outside Docker on host systemd, completely immune to container rebuilds, docker restarts, or service updates.
+- **Strict IP Security**: PostgreSQL is configured in `postgresql.conf` and `pg_hba.conf` to listen exclusively on `localhost` and internal Docker bridge (`172.17.0.1:5432`), completely blocked from public network access.
 
 ---
 
 ## Tech Stack
 
 ### Backend
-- **Framework**: Python 3.14, FastAPI, Pydantic v2
+- **Framework & Server**: Python 3.14, FastAPI, Pydantic v2, Granian Multi-Worker ASGI Server (2 workers)
 - **Agent Orchestration**: LangGraph, LangChain Core
 - **LLM Providers**: Google Gemini 2.5 Flash / Pro (`google-genai`), OpenAI GPT-5.6 Luna (`langchain-openai`)
-- **Document Parsing**: LLama-Index Core + Web Readers (`llama-index-core`, `llama-index-readers-web`)
-- **Web Search**: DuckDuckGo wrapper (`duckduckgo-search`) - unofficial, zero-cost, unofficial risk
+- **Authentication**: Clerk Backend SDK (`clerk-backend-api`), Svix Webhooks (`svix`)
+- **Document Parsing & RAG**: Llama-Index Core + Web Readers (`llama-index-core`, `llama-index-readers-web`)
+- **Web Search**: DuckDuckGo wrapper (`duckduckgo-search`)
 - **Observability**: LangSmith tracing + evaluation (`langsmith`)
-- **Scientific Computing**: SymPy for symbolic math (`sympy`)
-- **Database & ORM**: SQLModel (SQLAlchemy) over SQLite
+- **Database & ORM**: SQLModel (SQLAlchemy) over **PostgreSQL 16** (Production) / SQLite (Development)
 - **Financial Data & Math**: `yfinance`, `pandas`, `numpy`, `scipy`
-- **Security & Rate Limiting**: Argon2id, PyJWT, SlowAPI
 
 ### Frontend
-- **Framework**: React 19, TypeScript, Vite
+- **Framework**: React 19, TypeScript, Vite, Bun
+- **Authentication**: Clerk React (`@clerk/react`)
 - **Routing & State**: TanStack Router (`@tanstack/react-router`), TanStack Query (`@tanstack/react-query`)
 - **Styling & UI**: TailwindCSS v4, Lucide React, Radix UI primitives
-- **Rendering & Math**: `react-markdown`, `remark-gfm`, `remark-math`, `rehype-katex` (KaTeX inline/block LaTeX formulas)
+- **Rendering & Math**: `react-markdown`, `remark-gfm`, `remark-math`, `rehype-katex` (KaTeX LaTeX rendering)
+- **Data Visualization**: Recharts (`recharts`) for live interactive financial artifacts
+- **Exporting**: `jspdf` + `html2canvas` for vector PDF export
 
 ### Infrastructure & Deployment
 - **Containerization**: Multi-stage Docker build with `bun` frontend compilation and `uv` Python environment sync.
-- **Cloud Host**: AWS EC2 (Amazon Linux) with Nginx reverse proxy and Let's Encrypt TLS/SSL termination (`https://finance-agent.brnch.in`).
+- **Production Server**: AWS EC2 (Amazon Linux 2023) with native PostgreSQL 16, Granian multi-worker ASGI server, Nginx reverse proxy, and Let's Encrypt TLS/SSL termination (`https://finance-agent.brnch.in`).
 
 ---
 
@@ -109,8 +137,8 @@ The system features real-time Server-Sent Events (SSE) streaming, persistent too
 ### Prerequisites
 - **Python**: 3.11+ (managed via `uv` or `venv`)
 - **Node.js**: v18+ and `bun` / `npm`
-- **Gemini API Key** (standard chat): Obtainable from [Google AI Studio](https://aistudio.google.com)
-- **OpenAI API Key** (research mode): Obtainable from [OpenAI Platform](https://platform.openai.com/account/api-keys) (optional, required only for Research Mode with GPT-5.6 Luna)
+- **Clerk Account**: Credentials from [Clerk Dashboard](https://dashboard.clerk.com)
+- **Gemini API Key**: Obtainable from [Google AI Studio](https://aistudio.google.com)
 
 ---
 
@@ -123,22 +151,28 @@ The system features real-time Server-Sent Events (SSE) streaming, persistent too
    cd cfa-agent-langgraph/backend
    ```
 
-2. Create a virtual environment and install dependencies:
+2. Create a virtual environment and install dependencies using `uv`:
    ```bash
-   python -m venv .venv
+   uv sync
    source .venv/bin/activate
-   pip install -e .
    ```
 
-3. Configure environment variables in `.env` (or copy from `.env.example`):
+3. Configure environment variables in `.env`:
    ```bash
    cp ../.env.example .env
    ```
-   Set `GEMINI_API_KEY=your_actual_api_key`.
+   Set your keys:
+   ```env
+   GEMINI_API_KEY=your_gemini_api_key
+   CLERK_PUBLISHABLE_KEY=pk_test_...
+   VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
+   CLERK_SECRET_KEY=sk_test_...
+   CLERK_WEBHOOK_SECRET=whsec_...
+   ```
 
 4. Start the FastAPI development server:
    ```bash
-   fastapi dev app/main.py --port 8000
+   uv run fastapi dev app/main.py --port 8000
    ```
    The API will be live at `http://localhost:8000`. Interactive docs are available at `http://localhost:8000/docs`.
 
@@ -157,9 +191,18 @@ The system features real-time Server-Sent Events (SSE) streaming, persistent too
 
 ---
 
-### 2. Docker Setup (Local Container Run)
+### 2. Full Local Development Launcher
 
-Build and run the unified single-container image (serves frontend static assets + FastAPI API server):
+Run both backend and frontend concurrently with hot-reloading:
+```bash
+bash scripts/dev.sh
+```
+
+---
+
+### 3. Docker Setup (Local Container Run)
+
+Build and run the unified single-container image:
 
 ```bash
 # Build multi-stage Docker image
@@ -181,22 +224,23 @@ Access the app at `http://localhost:8000`.
 
 ---
 
-### 3. Production EC2 & Nginx Deployment
+### 4. Production EC2 & Nginx Deployment
 
-#### A. Host Environment Setup
+#### A. Host Environment Setup (Native PostgreSQL 16)
 On the target EC2 instance:
 ```bash
-# Install Docker and Nginx
-sudo dnf install -y docker nginx certbot python3-certbot-nginx
-sudo systemctl enable --now docker nginx
+# Install Docker, Native PostgreSQL 16, and Nginx
+sudo dnf install -y docker nginx postgresql16-server postgresql16-contrib certbot python3-certbot-nginx
+sudo systemctl enable --now docker nginx postgresql
 
-# Create deployment directory
-mkdir -p /home/ec2-user/finance-agent/data
-cd /home/ec2-user/finance-agent
-git clone git@github.com:CodeFingers809/cfa-agent-langgraph.git .
+# Initialize PostgreSQL cluster & create database user
+sudo postgresql-setup --initdb
+sudo systemctl start postgresql
+sudo -u postgres psql -c "CREATE USER finance_user WITH PASSWORD 'YourSecurePassword!';"
+sudo -u postgres psql -c "CREATE DATABASE finance_agent OWNER finance_user;"
 ```
 
-#### B. Create Production `.env`
+#### B. Configure Production `.env`
 Create `/home/ec2-user/finance-agent/.env`:
 ```env
 DOMAIN=finance-agent.brnch.in
@@ -206,30 +250,38 @@ ENVIRONMENT=production
 PROJECT_NAME="Finance Agent"
 SECRET_KEY="generate_secure_random_key_here"
 
-FIRST_SUPERUSER=aldbha123@gmail.com
-FIRST_SUPERUSER_PASSWORD=4^.Y8jrJ-%-Tctb
-
 GEMINI_API_KEY=your_gemini_api_key
-DATABASE_URL=sqlite:///data/app.db
-BACKEND_CORS_ORIGINS="https://finance-agent.brnch.in,http://finance-agent.brnch.in"
+DATABASE_URL=postgresql+psycopg://finance_user:YourSecurePassword!@172.17.0.1:5432/finance_agent
+BACKEND_CORS_ORIGINS="https://finance-agent.brnch.in"
+
+CLERK_PUBLISHABLE_KEY=pk_live_...
+VITE_CLERK_PUBLISHABLE_KEY=pk_live_...
+CLERK_SECRET_KEY=sk_live_...
+CLERK_WEBHOOK_SECRET=whsec_...
 ```
 
-#### C. Build & Launch Container
+#### C. Build & Launch Container (Granian Multi-Worker)
 ```bash
+cd /home/ec2-user/finance-agent
+git pull origin main
+
 sudo docker build -t finance-agent -f backend/Dockerfile .
 sudo docker rm -f finance-agent-app 2>/dev/null || true
 
+# Run database migrations
+sudo docker run --rm --env-file .env finance-agent bash scripts/prestart.sh
+
+# Launch container with Granian 2 workers
 sudo docker run -d \
   --name finance-agent-app \
   --restart always \
   -p 8000:8000 \
-  -v /home/ec2-user/finance-agent/data:/app/backend/data \
-  --env-file /home/ec2-user/finance-agent/.env \
+  --env-file .env \
   finance-agent
 ```
 
 #### D. Nginx SSL Reverse Proxy Config
-Create `/etc/nginx/conf.d/finance-agent.conf`:
+Ensure `/etc/nginx/conf.d/finance-agent.conf` has buffering disabled for real-time SSE streaming:
 ```nginx
 server {
     server_name finance-agent.brnch.in;
@@ -246,15 +298,9 @@ server {
 
         # Disable buffering for real-time SSE streaming
         proxy_buffering off;
-        proxy_cache off;
+        proxy_read_timeout 86400s;
     }
 }
-```
-
-Obtain Let's Encrypt SSL certificate:
-```bash
-sudo certbot --nginx -d finance-agent.brnch.in --non-interactive --agree-tos -m aldbha123@gmail.com
-sudo systemctl reload nginx
 ```
 
 ---
