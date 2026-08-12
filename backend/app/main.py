@@ -54,19 +54,23 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
         if not response.headers.get("Content-Security-Policy"):
             response.headers["Content-Security-Policy"] = (
-                "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.finance-agent.brnch.in https://*.brnch.in; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.clerk.accounts.dev https://*.clerk.com https://clerk.finance-agent.brnch.in https://*.brnch.in; "
                 "font-src 'self' https://fonts.gstatic.com data:; "
-                "img-src 'self' data: https: blob:; "
-                "connect-src 'self' http://localhost:3001 http://127.0.0.1:3001 ws://localhost:3001;"
+                "img-src 'self' data: https: blob: https://img.clerk.com https://*.clerk.com; "
+                "connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.finance-agent.brnch.in https://*.brnch.in https://api.clerk.com http://localhost:3001 http://127.0.0.1:3001 ws://localhost:3001; "
+                "worker-src 'self' blob: https://*.clerk.accounts.dev https://*.clerk.com https://clerk.finance-agent.brnch.in https://*.brnch.in; "
+                "frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.finance-agent.brnch.in https://*.brnch.in;"
             )
         return response
+
 
 
 app.add_middleware(SecurityHeadersMiddleware)
