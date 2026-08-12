@@ -1,4 +1,4 @@
-import { ClerkProvider, useAuth } from "@clerk/react";
+import { ClerkProvider, useClerk } from "@clerk/react";
 import {
     MutationCache,
     QueryCache,
@@ -64,12 +64,13 @@ const queryClient = new QueryClient({
 function ClerkTokenBridge({
     children,
 }: Readonly<{ children: React.ReactNode }>) {
-    const { getToken } = useAuth();
+    const { session } = useClerk();
 
     useEffect(() => {
         OpenAPI.TOKEN = async () => {
             try {
-                const t = await getToken();
+                if (!session) return "";
+                const t = await session.getToken();
                 return t ?? "";
             } catch (err) {
                 console.warn(
@@ -79,7 +80,7 @@ function ClerkTokenBridge({
                 return "";
             }
         };
-    }, [getToken]);
+    }, [session]);
 
     // Render immediately; Clerk loads in the background.
     // The app works without auth, and protected routes will wait for Clerk.
