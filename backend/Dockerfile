@@ -12,8 +12,12 @@ RUN bun install
 COPY ./frontend /app/frontend
 
 ARG VITE_API_URL=
+ARG VITE_CLERK_PUBLISHABLE_KEY=
+ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
+
 
 RUN bun run build
+
 
 
 FROM python:3.14

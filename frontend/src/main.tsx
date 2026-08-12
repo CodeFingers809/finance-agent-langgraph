@@ -16,6 +16,8 @@ import { routeTree } from "./routeTree.gen"
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || ""
 
+
+
 OpenAPI.BASE = import.meta.env.VITE_API_URL ?? ""
 // Clerk owns the session; ClerkTokenBridge (below) installs the real getToken
 // once the provider mounts. Until then there is no token to send.
