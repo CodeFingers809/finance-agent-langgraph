@@ -98,12 +98,24 @@ function Login() {
   const [code, setCode] = useState("")
 
   const onSubmit = async (data: FormData) => {
-    if (loading || !signIn) return
+    if (loading) return
     setLoading(true)
     try {
       if (isSignedIn && signOut) {
         await signOut()
       }
+
+      // If Clerk failed to load (timeout), signIn will be undefined
+      // Log for debugging and show error
+      if (!signIn) {
+        console.warn("Clerk SignIn not available (possibly timed out)")
+        toast.error(
+          "Authentication service unavailable. Please refresh the page."
+        )
+        setLoading(false)
+        return
+      }
+
       const result = await signIn.create({
         identifier: data.username,
         password: data.password,
@@ -113,6 +125,8 @@ function Login() {
         const sessionId = result.createdSessionId || signIn.createdSessionId
         if (sessionId) {
           await setActive({ session: sessionId })
+          // Give Clerk time to update the session state before navigating
+          await new Promise(resolve => setTimeout(resolve, 500))
         }
         toast.success("Successfully logged in!")
         navigate({ to: "/chat", replace: true })
@@ -144,6 +158,8 @@ function Login() {
         const sessionId = signIn.createdSessionId
         if (sessionId) {
           await setActive({ session: sessionId })
+          // Give Clerk time to update the session state before navigating
+          await new Promise(resolve => setTimeout(resolve, 500))
         }
         toast.success("Successfully logged in!")
         navigate({ to: "/chat", replace: true })
@@ -177,6 +193,8 @@ function Login() {
         const sessionId = result.createdSessionId || signIn.createdSessionId
         if (sessionId) {
           await setActive({ session: sessionId })
+          // Give Clerk time to update the session state before navigating
+          await new Promise(resolve => setTimeout(resolve, 500))
         }
         toast.success("Successfully authenticated!")
         navigate({ to: "/chat", replace: true })

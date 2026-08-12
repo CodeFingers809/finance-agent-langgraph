@@ -6,7 +6,7 @@ import {
     QueryClientProvider,
 } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
-import { StrictMode, useEffect, useState } from "react";
+import { StrictMode, useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import { ApiError, OpenAPI } from "./client";
 import { ThemeProvider } from "./components/theme-provider";
@@ -64,7 +64,7 @@ const queryClient = new QueryClient({
 function ClerkTokenBridge({
     children,
 }: Readonly<{ children: React.ReactNode }>) {
-    const { getToken, isLoaded } = useAuth();
+    const { getToken } = useAuth();
 
     useEffect(() => {
         OpenAPI.TOKEN = async () => {
@@ -81,25 +81,8 @@ function ClerkTokenBridge({
         };
     }, [getToken]);
 
-    // If Clerk never loads (adblocker/extension blocked), don't leave users on a
-    // blank page forever. Wait a short timeout, then render the app without a
-    // Clerk token so the UI can still show (some features will require auth).
-    const [timedOut, setTimedOut] = useState<boolean>(false);
-    useEffect(() => {
-        if (isLoaded) {
-            return;
-        }
-        const id = setTimeout(() => {
-            console.warn(
-                "Clerk did not load within 5s — rendering UI with fallback auth",
-            );
-            setTimedOut(true);
-            (globalThis as any).___clerkTokenBridgeTimedOut = true;
-        }, 5000);
-        return () => clearTimeout(id);
-    }, [isLoaded]);
-
-    if (!isLoaded && !timedOut) return null;
+    // Render immediately; Clerk loads in the background.
+    // The app works without auth, and protected routes will wait for Clerk.
     return <>{children}</>;
 }
 

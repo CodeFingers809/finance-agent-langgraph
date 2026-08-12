@@ -103,6 +103,8 @@ function SignUp() {
         const sessionId = result.createdSessionId || signUp!.createdSessionId
         if (sessionId) {
           await setActive({ session: sessionId })
+          // Give Clerk time to update the session state before navigating
+          await new Promise(resolve => setTimeout(resolve, 500))
         }
         toast.success("Account created successfully!")
         navigate({ to: "/chat", replace: true })
@@ -121,6 +123,8 @@ function SignUp() {
         const sessionId = signUp!.createdSessionId
         if (sessionId) {
           await setActive({ session: sessionId })
+          // Give Clerk time to update the session state before navigating
+          await new Promise(resolve => setTimeout(resolve, 500))
         }
         toast.success("Account logged in!")
         navigate({ to: "/chat", replace: true })
@@ -145,6 +149,8 @@ function SignUp() {
         const sessionId = result.createdSessionId || signUp!.createdSessionId
         if (sessionId) {
           await setActive({ session: sessionId })
+          // Give Clerk time to update the session state before navigating
+          await new Promise(resolve => setTimeout(resolve, 500))
         }
         toast.success("Account verified & logged in!")
         navigate({ to: "/chat", replace: true })
