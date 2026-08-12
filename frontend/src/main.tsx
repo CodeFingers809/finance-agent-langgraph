@@ -16,6 +16,11 @@ import { routeTree } from "./routeTree.gen"
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || ""
 
+const CLERK_DOMAIN =
+  (import.meta.env.VITE_CLERK_DOMAIN as string) ||
+  (typeof window !== "undefined" && window.location.hostname.includes("brnch.in")
+    ? "finance-agent.brnch.in"
+    : undefined)
 
 
 OpenAPI.BASE = import.meta.env.VITE_API_URL ?? ""
@@ -82,14 +87,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ClerkProvider
       publishableKey={PUBLISHABLE_KEY}
-      routerPush={(to) => router.navigate({ to })}
-      routerReplace={(to) => router.navigate({ to, replace: true })}
-      domain={
-        typeof window !== "undefined" && window.location.hostname.endsWith("brnch.in")
-          ? "finance-agent.brnch.in"
-          : undefined
-      }
+      routerPush={(to: string) => router.navigate({ to })}
+      routerReplace={(to: string) => router.navigate({ to, replace: true })}
+      domain={CLERK_DOMAIN}
     >
+
+
 
       <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
         <QueryClientProvider client={queryClient}>
