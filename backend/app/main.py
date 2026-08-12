@@ -57,19 +57,19 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
         if not response.headers.get("Content-Security-Policy"):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.finance-agent.brnch.in https://*.brnch.in; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.finance-agent.brnch.in https://*.brnch.in https://challenges.cloudflare.com; "
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.clerk.accounts.dev https://*.clerk.com https://clerk.finance-agent.brnch.in https://*.brnch.in; "
-                "font-src 'self' https://fonts.gstatic.com data:; "
+                "font-src 'self' data: https://fonts.gstatic.com https://*.clerk.accounts.dev https://*.clerk.com; "
                 "img-src 'self' data: https: blob: https://img.clerk.com https://*.clerk.com; "
-                "connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.finance-agent.brnch.in https://*.brnch.in https://api.clerk.com http://localhost:3001 http://127.0.0.1:3001 ws://localhost:3001; "
+                "connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.finance-agent.brnch.in https://*.brnch.in https://api.clerk.com https://challenges.cloudflare.com http://localhost:3001 http://127.0.0.1:3001 ws://localhost:3001; "
                 "worker-src 'self' blob: https://*.clerk.accounts.dev https://*.clerk.com https://clerk.finance-agent.brnch.in https://*.brnch.in; "
-                "frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.finance-agent.brnch.in https://*.brnch.in;"
+                "frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.finance-agent.brnch.in https://*.brnch.in https://challenges.cloudflare.com;"
             )
         return response
+
 
 
 
