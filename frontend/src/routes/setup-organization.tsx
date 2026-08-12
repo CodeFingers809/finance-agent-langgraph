@@ -37,16 +37,17 @@ function SetupOrganization() {
       const firstOrg = user.organizationMemberships[0]
       if (firstOrg.organization?.id) {
         setSelectedOrgId(firstOrg.organization.id)
+        setLoading(true)
       }
     }
   }, [user, navigate])
 
   // Auto-submit when org is detected
   useEffect(() => {
-    if (selectedOrgId && !loading) {
+    if (selectedOrgId && loading) {
       handleSetupOrgWithId(selectedOrgId)
     }
-  }, [selectedOrgId])
+  }, [selectedOrgId, loading])
 
   const handleSetupOrgWithId = async (orgId: string) => {
     setLoading(true)

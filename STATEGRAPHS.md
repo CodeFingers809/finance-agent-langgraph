@@ -19,18 +19,6 @@ flowchart TD
     Decision -- "No" --> END([END])
 ```
 
-> [!WARNING]
-> **Bug Note: Unused `SYSTEM_PROMPT`**
-> In `backend/app/agent/graph.py`, `SYSTEM_PROMPT` is defined at lines 14–33 with explicit CFA instructions, stock ticker guidelines (`.NS`/`.BO`), portfolio handling mandates, and watchlist creation rules.
-> However, in `get_agent_executor()` (lines 79–82), `create_react_agent` is called without passing `SYSTEM_PROMPT` (e.g. via `prompt` or `state_modifier`):
-> ```python
-> agent = create_react_agent(
->     model=llm,
->     tools=ALL_FINANCIAL_TOOLS,
-> )
-> ```
-> As a result, the `SYSTEM_PROMPT` is never injected into the agent graph.
-
 ---
 
 ## 2. Research Mode (`backend/app/agent/research_graph.py`)
@@ -43,19 +31,20 @@ Research mode is **not** a LangGraph `StateGraph`. It is implemented as an imper
 flowchart TD
     START([START]) --> InitVars["Initialize State<br/>(iteration = 1, max_iterations = 2, is_satisfied = False)"]
     InitVars --> LoopCheck{"iteration <= 2 AND<br/>not is_satisfied?"}
-    
+
     LoopCheck -- "Yes" --> PlannerLLM["Planner LLM<br/>(PLANNER_SYSTEM_PROMPT + Memory)"]
     PlannerLLM --> ParseJSON["Parse JSON Decision<br/>(is_satisfied, reasoning, tool_calls)"]
     ParseJSON --> CheckBreak{"is_satisfied (and iter > 1)<br/>OR no tool_calls?"}
-    
+
     CheckBreak -- "Yes" --> SynthesisPhase
     CheckBreak -- "No" --> FanOut["Fan-Out: asyncio.gather<br/>(Execute 1-4 tools in parallel)"]
-    
+
     FanOut --> FanIn["Fan-In: Consolidate outputs<br/>into gathered_context memory"]
     FanIn --> IncrementIter["Increment iteration<br/>(iteration += 1)"]
     IncrementIter --> PacingSleep["asyncio.sleep(6.1s)<br/>(10 RPM Rate-Limit Cap)"]
     PacingSleep --> LoopCheck
-    
+
     LoopCheck -- "No" --> SynthesisPhase["Synthesis LLM Stream<br/>(Hedge-Fund Report Prompt)"]
     SynthesisPhase --> END([END])
 ```
+
