@@ -60,8 +60,14 @@ function SetupOrganization() {
       navigate({ to: "/chat", replace: true })
     } catch (err: any) {
       console.error("Failed to set active org:", err)
-      const msg = err?.message || "Failed to select organization. Please try again."
-      toast.error(msg)
+      // If user is already a member, that's fine - just navigate to chat
+      const msg = err?.message || ""
+      if (msg.includes("already a member")) {
+        console.log("User already member, navigating to chat")
+        navigate({ to: "/chat", replace: true })
+        return
+      }
+      toast.error(msg || "Failed to select organization. Please try again.")
       setLoading(false)
     }
   }
@@ -121,39 +127,49 @@ function SetupOrganization() {
     }
   }
 
+  // If org was detected and we're setting it active, show loading state
+  if (selectedOrgId && loading) {
+    return (
+      <AuthLayout>
+        <div className="flex flex-col items-center justify-center gap-4 py-12">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold">Loading your workspace</h1>
+            <p className="text-xs text-[#52525B] mt-2">Preparing your dashboard...</p>
+          </div>
+        </div>
+      </AuthLayout>
+    )
+  }
+
   return (
     <AuthLayout>
       <form onSubmit={handleSetupOrg} className="flex flex-col gap-6">
         <div className="flex flex-col items-center gap-2 text-center">
           <h1 className="text-2xl font-bold">Set up your workspace</h1>
           <p className="text-xs text-[#52525B]">
-            {selectedOrgId
-              ? "Ready to access your workspace"
-              : "Give your organization a name to get started"}
+            Give your organization a name to get started
           </p>
         </div>
 
         <div className="grid gap-4">
-          {!selectedOrgId && (
-            <div className="flex flex-col gap-2">
-              <label htmlFor="org-name" className="text-xs font-bold text-[#27272A]">
-                Organization Name
-              </label>
-              <Input
-                id="org-name"
-                data-testid="org-name-input"
-                placeholder="e.g., My Company"
-                type="text"
-                value={orgName}
-                onChange={(e) => setOrgName(e.target.value)}
-                disabled={loading}
-                required
-              />
-            </div>
-          )}
+          <div className="flex flex-col gap-2">
+            <label htmlFor="org-name" className="text-xs font-bold text-[#27272A]">
+              Organization Name
+            </label>
+            <Input
+              id="org-name"
+              data-testid="org-name-input"
+              placeholder="e.g., My Company"
+              type="text"
+              value={orgName}
+              onChange={(e) => setOrgName(e.target.value)}
+              disabled={loading}
+              required
+            />
+          </div>
 
           <LoadingButton type="submit" className="w-full" loading={loading}>
-            {selectedOrgId ? "Continue to Dashboard" : "Create Organization"}
+            Create Organization
           </LoadingButton>
         </div>
       </form>
