@@ -30,6 +30,10 @@ class RoleUpdateRequest(BaseModel):
     role: str
 
 
+class CreateOrgRequest(BaseModel):
+    name: str
+
+
 def _require_active_org(auth: CurrentAuth) -> str:
     if not auth.org_id:
         raise HTTPException(
@@ -95,6 +99,66 @@ async def get_my_organization(
         "members": members,
         "user_email": auth.user.email,
     }
+
+
+@router.post("", status_code=201)
+async def create_organization(
+    payload: CreateOrgRequest,
+    session: SessionDep,
+    auth: CurrentAuth,
+) -> dict[str, Any]:
+    """Create a new organization and add the current user as admin."""
+    if not auth.user.clerk_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Your account is not linked to Clerk yet; sign out and back in.",
+        )
+
+    try:
+        # Create org in Clerk
+        org = await clerk_request(
+            "POST",
+            "/organizations",
+            json={
+                "name": payload.name,
+                "created_by": auth.user.clerk_user_id,
+            },
+        )
+        org_id = org.get("id")
+        if not org_id:
+            raise HTTPException(
+                status_code=502,
+                detail="Clerk returned no organization ID",
+            )
+
+        # Add the user as admin to the newly created org
+        await clerk_request(
+            "POST",
+            f"/organizations/{org_id}/memberships",
+            json={
+                "user_id": auth.user.clerk_user_id,
+                "role": "org:admin",
+            },
+        )
+
+        # Sync to local DB
+        if not session.get(Organization, org_id):
+            session.add(
+                Organization(
+                    id=org_id,
+                    name=org.get("name") or payload.name,
+                    slug=org.get("slug"),
+                )
+            )
+            session.commit()
+
+        return {
+            "id": org_id,
+            "name": org.get("name") or payload.name,
+            "slug": org.get("slug"),
+        }
+    except ClerkAPIError as e:
+        raise HTTPException(status_code=502, detail=f"Clerk error: {e.detail}") from e
 
 
 @router.get("/me/stats")

@@ -1,4 +1,4 @@
-import { useOrganization, useOrganizationList } from "@clerk/react"
+import { useClerk, useOrganization, useOrganizationList } from "@clerk/react"
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router"
 import { useEffect } from "react"
 
@@ -20,6 +20,7 @@ export const Route = createFileRoute("/_layout")({
 function Layout() {
   const navigate = useNavigate()
   const { isLoaded, isSignedIn } = useAuth()
+  const { session } = useClerk()
   const { organization } = useOrganization()
   const { userMemberships, setActive } = useOrganizationList({
     userMemberships: { infinite: true },
@@ -30,6 +31,16 @@ function Layout() {
       navigate({ to: "/login", replace: true })
     }
   }, [isLoaded, isSignedIn, navigate])
+
+  // Check for pending tasks (e.g., choose-organization) and redirect to setup
+  useEffect(() => {
+    if (isLoaded && isSignedIn && session) {
+      const tasks = (session.user?.unsafeMetadata as any)?.tasks
+      if (Array.isArray(tasks) && tasks.length > 0) {
+        navigate({ to: "/setup-organization", replace: true })
+      }
+    }
+  }, [isLoaded, isSignedIn, session, navigate])
 
   // Activate the user's first org so org-scoped requests carry an org_id.
   useEffect(() => {

@@ -14,6 +14,7 @@ import { Route as LayoutRouteImport } from './routes/_layout'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as RecoverPasswordRouteImport } from './routes/recover-password'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as SetupOrganizationRouteImport } from './routes/setup-organization'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SsoCallbackRouteImport } from './routes/sso-callback'
 import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
@@ -48,6 +49,11 @@ const RecoverPasswordRoute = RecoverPasswordRouteImport.update({
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SetupOrganizationRoute = SetupOrganizationRouteImport.update({
+  id: '/setup-organization',
+  path: '/setup-organization',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignupRoute = SignupRouteImport.update({
@@ -111,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/recover-password': typeof RecoverPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/setup-organization': typeof SetupOrganizationRoute
   '/signup': typeof SignupRoute
   '/sso-callback': typeof SsoCallbackRoute
   '/admin': typeof LayoutAdminRoute
@@ -128,6 +135,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/recover-password': typeof RecoverPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/setup-organization': typeof SetupOrganizationRoute
   '/signup': typeof SignupRoute
   '/sso-callback': typeof SsoCallbackRoute
   '/admin': typeof LayoutAdminRoute
@@ -147,6 +155,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/recover-password': typeof RecoverPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/setup-organization': typeof SetupOrganizationRoute
   '/signup': typeof SignupRoute
   '/sso-callback': typeof SsoCallbackRoute
   '/_layout/admin': typeof LayoutAdminRoute
@@ -166,6 +175,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/recover-password'
     | '/reset-password'
+    | '/setup-organization'
     | '/signup'
     | '/sso-callback'
     | '/admin'
@@ -183,6 +193,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/recover-password'
     | '/reset-password'
+    | '/setup-organization'
     | '/signup'
     | '/sso-callback'
     | '/admin'
@@ -201,6 +212,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/recover-password'
     | '/reset-password'
+    | '/setup-organization'
     | '/signup'
     | '/sso-callback'
     | '/_layout/admin'
@@ -220,6 +232,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   RecoverPasswordRoute: typeof RecoverPasswordRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  SetupOrganizationRoute: typeof SetupOrganizationRoute
   SignupRoute: typeof SignupRoute
   SsoCallbackRoute: typeof SsoCallbackRoute
 }
@@ -259,6 +272,13 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/setup-organization': {
+      id: '/setup-organization'
+      path: '/setup-organization'
+      fullPath: '/setup-organization'
+      preLoaderRoute: typeof SetupOrganizationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/signup': {
@@ -374,6 +394,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   RecoverPasswordRoute: RecoverPasswordRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  SetupOrganizationRoute: SetupOrganizationRoute,
   SignupRoute: SignupRoute,
   SsoCallbackRoute: SsoCallbackRoute,
 }
