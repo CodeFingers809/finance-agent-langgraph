@@ -60,7 +60,6 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Finance Agent"
     GEMINI_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
-    ANTHROPIC_API_KEY: str = ""
 
 
     LANGSMITH_API_KEY: str = ""

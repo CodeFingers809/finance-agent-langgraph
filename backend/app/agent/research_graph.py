@@ -63,40 +63,19 @@ def extract_plain_text_from_llm_content(content: Any) -> str:
     return text
 
 
-
-def get_research_llm(model_name: str = "claude-haiku-4-5-20251001", temperature: float = 0.1):
+def get_research_llm(model_name: str = "gemini-3.5-flash-lite", temperature: float = 0.1):
     """
-    Construct LLM for Research Mode supporting all 4 available models:
-    - Claude 4.5 Haiku ('claude-haiku-4-5-20251001')
+    Construct LLM for Research Mode supporting Gemini models:
+    - Gemini 3.6 Flash ('gemini-3.6-flash')
     - Gemini 3.5 Flash Lite ('gemini-3.5-flash-lite')
-    - Gemini 3.5 Flash ('gemini-3.5-flash')
-    - Gemini 2.5 Pro ('gemini-2.5-pro')
     """
     lower = (model_name or "").lower()
 
-    # 1. Anthropic Claude 4.5 Haiku
-    if "haiku" in lower or "claude" in lower or "anthropic" in lower:
-        anthropic_key = settings.ANTHROPIC_API_KEY or os.getenv("ANTHROPIC_API_KEY")
-        if anthropic_key:
-            try:
-                from langchain_anthropic import ChatAnthropic
-                return ChatAnthropic(
-                    model="claude-haiku-4-5-20251001",
-                    api_key=SecretStr(anthropic_key),
-                    temperature=temperature,
-                    streaming=True,
-                )
-            except Exception as e:
-                logger.warning(f"Failed to initialize ChatAnthropic: {e}. Falling back to Gemini.")
-
-    # 2. Gemini Models
     gem_key = settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY", "demo_placeholder_key")
-    if "pro" in lower:
-        gem_model = "gemini-2.5-pro"
-    elif "lite" in lower:
-        gem_model = "gemini-3.5-flash-lite"
+    if "3.6" in lower or ("flash" in lower and "lite" not in lower) or "upgraded" in lower or "pro" in lower:
+        gem_model = "gemini-3.6-flash"
     else:
-        gem_model = "gemini-3.5-flash"
+        gem_model = "gemini-3.5-flash-lite"
 
     from langchain_google_genai import ChatGoogleGenerativeAI
     return ChatGoogleGenerativeAI(
@@ -105,9 +84,6 @@ def get_research_llm(model_name: str = "claude-haiku-4-5-20251001", temperature:
         temperature=temperature,
         streaming=True,
     )
-
-
-
 
 
 PLANNER_SYSTEM_PROMPT = """

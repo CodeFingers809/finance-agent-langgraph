@@ -70,12 +70,12 @@ def check_and_update_quota(
             if is_upgraded:
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Daily limit reached for upgraded Gemini Flash model (3 requests/day).",
+                    detail="Daily limit reached for upgraded Gemini 3.6 Flash model (3 requests/day).",
                 )
             else:
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Daily quota reached for standard Gemini Flash Lite model (10 requests/day).",
+                    detail="Daily quota reached for standard Gemini 3.5 Flash-Lite model (10 requests/day).",
                 )
 
         return {"status": "allowed", "count": count, "limit": limit}

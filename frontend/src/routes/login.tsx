@@ -129,7 +129,7 @@ function Login() {
           // Small delay to let Clerk state propagate through React
           await new Promise(resolve => setTimeout(resolve, 200))
         }
-        navigate({ to: "/setup-organization", replace: true })
+        navigate({ to: "/chat", replace: true })
       } else if (
         result.status === "needs_first_factor" ||
         result.status === "needs_second_factor" ||
@@ -165,7 +165,7 @@ function Login() {
         }
         toast.success("Successfully logged in!")
         await new Promise(resolve => setTimeout(resolve, 200))
-        navigate({ to: "/setup-organization", replace: true })
+        navigate({ to: "/chat", replace: true })
         return
       }
       toast.error(msg)
@@ -199,7 +199,7 @@ function Login() {
         }
         toast.success("Successfully authenticated!")
         await new Promise(resolve => setTimeout(resolve, 200))
-        navigate({ to: "/setup-organization", replace: true })
+        navigate({ to: "/chat", replace: true })
       } else {
         toast.error(`Verification status: ${result.status}`)
       }
@@ -214,7 +214,7 @@ function Login() {
         }
         toast.success("Successfully authenticated!")
         await new Promise(resolve => setTimeout(resolve, 200))
-        navigate({ to: "/setup-organization", replace: true })
+        navigate({ to: "/chat", replace: true })
         return
       }
       toast.error(msg)

@@ -18,15 +18,27 @@ const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || "";
 
 OpenAPI.BASE = import.meta.env.VITE_API_URL ?? "";
 
-// Clerk owns the session; ClerkTokenBridge (below) installs the real getToken
-// once the provider mounts. Until then there is no token to send.
-OpenAPI.TOKEN = async () => "";
+// Eager, self-hydrating OpenAPI token getter that accesses window.Clerk immediately
+OpenAPI.TOKEN = async () => {
+    try {
+        const globalClerk = (window as any).Clerk;
+        if (globalClerk?.session) {
+            const token = await globalClerk.session.getToken();
+            if (token) return token;
+        }
+    } catch {
+        // Fallback
+    }
+    return "";
+};
 
 const handleApiError = (error: Error) => {
-    // 403/404 are legitimate authorization/not-found answers under RBAC -- only a
-    // 401 means the session itself is invalid, and Clerk handles that redirect.
+    // 403/404 are legitimate authorization/not-found answers under RBAC.
+    // Only redirect on 401 if user does NOT have a session cookie (i.e., truly logged out).
+    // This prevents premature redirects to /login on hard refresh while Clerk token is hydrating.
     if (error instanceof ApiError && error.status === 401) {
-        if (window.location.pathname !== "/login") {
+        const hasSessionCookie = /(^|;\s*)(__session|__client_uat)=/.test(document.cookie);
+        if (!hasSessionCookie && window.location.pathname !== "/login") {
             window.location.href = "/login";
         }
     }
@@ -49,11 +61,7 @@ const queryClient = new QueryClient({
 });
 
 /**
- * Feeds Clerk's session token to the generated API client.
- *
- * The client is a module-level singleton created outside React, so the token
- * getter has to be installed from inside the provider where useAuth() works.
- * getToken() returns a cached token and refreshes it as needed.
+ * Feeds Clerk's session token to the generated API client eagerly.
  */
 function ClerkTokenBridge({
     children,
@@ -63,21 +71,22 @@ function ClerkTokenBridge({
     useEffect(() => {
         OpenAPI.TOKEN = async () => {
             try {
-                if (!session) return "";
-                const t = await session.getToken();
-                return t ?? "";
-            } catch (err) {
-                console.warn(
-                    "Clerk getToken failed, returning empty token:",
-                    err,
-                );
+                if (session) {
+                    const t = await session.getToken();
+                    if (t) return t;
+                }
+                const globalClerk = (window as any).Clerk;
+                if (globalClerk?.session) {
+                    const t = await globalClerk.session.getToken();
+                    if (t) return t;
+                }
+            } catch {
                 return "";
             }
+            return "";
         };
     }, [session]);
 
-    // Render immediately; Clerk loads in the background.
-    // The app works without auth, and protected routes will wait for Clerk.
     return <>{children}</>;
 }
 

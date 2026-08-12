@@ -177,8 +177,8 @@ export function HeaderControls() {
         {quota && (
           <Badge className="gap-1 font-bold text-[11px] bg-amber-200 text-[#27272A] border-1.5 border-[#27272A] shadow-[1.5px_1.5px_0px_#27272A]">
             <Zap className="h-3 w-3 fill-[#27272A]" />
-            Standard: {quota.standard_remaining_today}/
-            {quota.standard_limit_today} | Upgraded:{" "}
+            Flash-Lite: {quota.standard_remaining_today}/
+            {quota.standard_limit_today} | 3.6 Flash:{" "}
             {quota.upgraded_remaining_today}/{quota.upgraded_limit_today}
           </Badge>
         )}

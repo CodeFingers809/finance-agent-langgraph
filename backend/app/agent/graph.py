@@ -8,7 +8,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 
 
-from app.agent.tools import ALL_FINANCIAL_TOOLS
+from app.agent.tools import ALL_FINANCIAL_TOOLS, safe_float
 from app.core.config import settings
 
 SYSTEM_PROMPT = """You are an elite Financial Agent and personal Chartered Financial Analyst (CFA) specializing in the Indian stock market (NSE & BSE).
@@ -47,44 +47,25 @@ Key Instructions:
 
 def get_agent_executor(model_name: str = "gemini-3.5-flash-lite"):
     """
-    Route to appropriate LLM provider based on model_name.
-    Supports Gemini (google-genai) and OpenAI (langchain-openai).
+    Route to Gemini LLM provider based on model_name.
     Returns agent executor (LangGraph ReAct agent).
     """
     lower = model_name.lower()
+    api_key = settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        api_key = "demo_placeholder_key"
 
-    if "haiku" in lower or "claude" in lower or "anthropic" in lower:
-        api_key = settings.ANTHROPIC_API_KEY or os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            api_key = "demo_placeholder_key"
-        from langchain_anthropic import ChatAnthropic
-        from pydantic import SecretStr
-        llm = ChatAnthropic(
-            model="claude-haiku-4-5-20251001",
-            api_key=SecretStr(api_key),
-            temperature=0.1,
-            streaming=True,
-        )
-
-
+    if "3.6" in lower or ("flash" in lower and "lite" not in lower) or "upgraded" in lower or "pro" in lower:
+        mapped_model = "gemini-3.6-flash"
     else:
-        api_key = settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            api_key = "demo_placeholder_key"
+        mapped_model = "gemini-3.5-flash-lite"
 
-        if "pro" in lower:
-            mapped_model = "gemini-2.5-pro"
-        elif "lite" in lower or "standard" in lower:
-            mapped_model = "gemini-3.5-flash-lite"
-        else:
-            mapped_model = "gemini-3.5-flash"
-
-        llm = ChatGoogleGenerativeAI(
-            model=mapped_model,
-            google_api_key=api_key,
-            temperature=0.2,
-            streaming=True,
-        )
+    llm = ChatGoogleGenerativeAI(
+        model=mapped_model,
+        google_api_key=api_key,
+        temperature=0.2,
+        streaming=True,
+    )
 
     agent = create_react_agent(
         model=llm,
@@ -212,10 +193,10 @@ async def stream_agent_events(
                             "type": "growth_chart",
                             "symbol": chart_data_dict.get("symbol", ""),
                             "quarters": chart_data_dict.get("quarters", []),
-                            "revenue": [float(v) for v in chart_data_dict.get("revenue", [])],
-                            "net_income": [float(v) for v in chart_data_dict.get("net_income", [])],
-                            "yoy_growth_pct": [float(v) for v in chart_data_dict.get("yoy_growth_pct", [])],
-                            "qoq_growth_pct": [float(v) for v in chart_data_dict.get("qoq_growth_pct", [])],
+                            "revenue": [safe_float(v) for v in chart_data_dict.get("revenue", [])],
+                            "net_income": [safe_float(v) for v in chart_data_dict.get("net_income", [])],
+                            "yoy_growth_pct": [safe_float(v) for v in chart_data_dict.get("yoy_growth_pct", [])],
+                            "qoq_growth_pct": [safe_float(v) for v in chart_data_dict.get("qoq_growth_pct", [])],
                         }
                     except Exception:
                         pass
@@ -225,9 +206,9 @@ async def stream_agent_events(
                             "type": "analyst_chart",
                             "symbol": chart_data_dict.get("symbol", ""),
                             "dates": chart_data_dict.get("dates", []),
-                            "target_prices": [float(v) for v in chart_data_dict.get("target_prices", [])],
+                            "target_prices": [safe_float(v) for v in chart_data_dict.get("target_prices", [])],
                             "firms": chart_data_dict.get("firms", []),
-                            "current_price": float(chart_data_dict.get("current_price", 0.0)),
+                            "current_price": safe_float(chart_data_dict.get("current_price", 0.0)),
                         }
                     except Exception:
                         pass
@@ -236,8 +217,8 @@ async def stream_agent_events(
                         yield {
                             "type": "fii_dii_chart",
                             "dates": chart_data_dict.get("dates", []),
-                            "fii_net_cr": [float(v) for v in chart_data_dict.get("fii_net_cr", [])],
-                            "dii_net_cr": [float(v) for v in chart_data_dict.get("dii_net_cr", [])],
+                            "fii_net_cr": [safe_float(v) for v in chart_data_dict.get("fii_net_cr", [])],
+                            "dii_net_cr": [safe_float(v) for v in chart_data_dict.get("dii_net_cr", [])],
                         }
                     except Exception:
                         pass

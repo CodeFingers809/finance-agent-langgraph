@@ -122,9 +122,9 @@ function ChatPage() {
 
   const [isTimelineOpen, setIsTimelineOpen] = useState(false)
   const [selectedModel, setSelectedModel] = useState<string>(() => {
-    return (
-      localStorage.getItem("selected_gemini_model") || "gemini-3.5-flash-lite"
-    )
+    const saved = localStorage.getItem("selected_gemini_model")
+    const valid = ["gemini-3.6-flash", "gemini-3.5-flash-lite"]
+    return valid.includes(saved || "") ? saved! : "gemini-3.5-flash-lite"
   })
   const [isResearchMode, setIsResearchMode] = useState(false)
   const [researchStage, setResearchStage] = useState<string | null>(null)
@@ -1085,37 +1085,22 @@ function ChatPage() {
             >
               <SelectTrigger className="h-8 text-[11px] font-bold bg-[#FAF6F0] border border-[#27272A] text-[#27272A] shadow-[1px_1px_0px_#27272A] w-[170px]">
                 <SelectValue>
-                  {selectedModel === "claude-haiku-4-5-20251001" && "Claude 4.5 Haiku"}
-                  {selectedModel === "gemini-3.5-flash-lite" && "Gemini 3.5 Flash Lite"}
-                  {selectedModel === "gemini-3.5-flash" && "Gemini 3.5 Flash"}
-                  {selectedModel === "gemini-2.5-pro" && "Gemini 2.5 Pro"}
+                  {selectedModel === "gemini-3.6-flash" && "Gemini 3.6 Flash"}
+                  {selectedModel === "gemini-3.5-flash-lite" && "Gemini 3.5 Flash-Lite"}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent className="bg-white border-2 border-[#27272A]">
                 <SelectItem
-                  value="claude-haiku-4-5-20251001"
+                  value="gemini-3.6-flash"
                   className="text-xs font-semibold"
                 >
-                  Claude 4.5 Haiku (1/day)
+                  Gemini 3.6 Flash (3/day)
                 </SelectItem>
                 <SelectItem
                   value="gemini-3.5-flash-lite"
                   className="text-xs font-semibold"
                 >
-                  Gemini 3.5 Flash Lite (Standard - 10/day)
-                </SelectItem>
-
-                <SelectItem
-                  value="gemini-3.5-flash"
-                  className="text-xs font-semibold"
-                >
-                  Gemini 3.5 Flash (Upgraded - 3/day)
-                </SelectItem>
-                <SelectItem
-                  value="gemini-2.5-pro"
-                  className="text-xs font-semibold"
-                >
-                  Gemini 2.5 Pro (Pro - 1/day)
+                  Gemini 3.5 Flash-Lite (10/day)
                 </SelectItem>
               </SelectContent>
 

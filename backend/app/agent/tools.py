@@ -33,6 +33,46 @@ def normalize_indian_symbol(symbol: str) -> str:
     return f"{s}.NS"
 
 
+def safe_float(val: Any, default: float = 0.0) -> float:
+    """Safely convert a value to float, replacing NaN, None, or Infinity with default."""
+    if val is None or pd.isna(val):
+        return default
+    try:
+        f = float(val)
+        if math.isnan(f) or math.isinf(f):
+            return default
+        return f
+    except Exception:
+        return default
+
+
+def sanitize_nan(obj: Any) -> Any:
+    """Recursively replace NaN, Infinity, -Infinity in dicts/lists/primitives with None."""
+    if obj is None:
+        return None
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, (int, str, bool)):
+        return obj
+    if isinstance(obj, dict):
+        return {str(k): sanitize_nan(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [sanitize_nan(x) for x in obj]
+    try:
+        if pd.isna(obj):
+            return None
+    except Exception:
+        pass
+    return obj
+
+
+def safe_json_dumps(obj: Any, **kwargs) -> str:
+    """Safely serialize data to JSON, ensuring zero NaN/Infinity values."""
+    return json.dumps(sanitize_nan(obj), **kwargs)
+
+
 @tool
 def get_stock_prices_and_metrics(symbols: list[str]) -> str:
     """Fetch current price, key metrics (PE, PB, Market Cap, EV/EBITDA, Dividend Yield) for Indian stocks (NSE/BSE)."""
@@ -59,7 +99,7 @@ def get_stock_prices_and_metrics(symbols: list[str]) -> str:
             }
         except Exception as e:
             results[sym] = {"error": f"Failed to fetch data for {sym}: {str(e)}"}
-    return json.dumps(results, indent=2)
+    return safe_json_dumps(results, indent=2)
 
 
 def format_df_to_clean_dict(df: pd.DataFrame, max_cols: int = 4) -> dict:
@@ -154,9 +194,9 @@ def get_financial_statements(symbol: str) -> str:
             "balance_sheet": format_df_to_clean_dict(balance_sheet, max_cols=2),
             "quarterly_balance_sheet": format_df_to_clean_dict(quarterly_bs, max_cols=2),
         }
-        return json.dumps(summary, default=str, indent=2)
+        return safe_json_dumps(summary, default=str, indent=2)
     except Exception as e:
-        return json.dumps({"error": f"Failed to fetch financial statements for {symbol}: {str(e)}"})
+        return safe_json_dumps({"error": f"Failed to fetch financial statements for {symbol}: {str(e)}"})
 
 
 
@@ -177,9 +217,9 @@ def get_stock_news(symbol: str) -> str:
                     "link": content.get("canonicalUrl", {}).get("url") or item.get("link"),
                     "pubDate": content.get("pubDate") or item.get("providerPublishTime"),
                 })
-        return json.dumps({"symbol": norm_sym, "news": cleaned_news}, indent=2)
+        return safe_json_dumps({"symbol": norm_sym, "news": cleaned_news}, indent=2)
     except Exception as e:
-        return json.dumps({"error": f"Failed to fetch news for {symbol}: {str(e)}"})
+        return safe_json_dumps({"error": f"Failed to fetch news for {symbol}: {str(e)}"})
 
 
 @tool
@@ -198,9 +238,9 @@ def get_analyst_predictions(symbol: str) -> str:
             "recommendationKey": info.get("recommendationKey"),
             "numberOfAnalystOpinions": info.get("numberOfAnalystOpinions"),
         }
-        return json.dumps({"symbol": norm_sym, "recommendations": recommendations}, indent=2)
+        return safe_json_dumps({"symbol": norm_sym, "recommendations": recommendations}, indent=2)
     except Exception as e:
-        return json.dumps({"error": f"Failed to fetch analyst predictions for {symbol}: {str(e)}"})
+        return safe_json_dumps({"error": f"Failed to fetch analyst predictions for {symbol}: {str(e)}"})
 
 
 @tool
@@ -226,7 +266,7 @@ def get_indian_indices() -> str:
             }
         except Exception as e:
             results[name] = {"error": str(e)}
-    return json.dumps(results, indent=2)
+    return safe_json_dumps(results, indent=2)
 
 
 @tool
@@ -237,16 +277,16 @@ def run_technical_analysis(symbol: str, period: str = "1y") -> str:
         ticker = yf.Ticker(norm_sym)
         df = ticker.history(period=period)
         if df.empty or len(df) < 30:
-            return json.dumps({"error": f"Insufficient historical data for {symbol}."})
+            return safe_json_dumps({"error": f"Insufficient historical data for {symbol}."})
 
         close = df["Close"]
         volume = df["Volume"]
-        latest_price = float(close.iloc[-1])
+        latest_price = safe_float(close.iloc[-1])
 
         # 1. EMAs (20, 50, 200)
-        ema20 = float(close.ewm(span=20, adjust=False).mean().iloc[-1])
-        ema50 = float(close.ewm(span=50, adjust=False).mean().iloc[-1])
-        ema200 = float(close.ewm(span=200, adjust=False).mean().iloc[-1]) if len(close) >= 200 else None
+        ema20 = safe_float(close.ewm(span=20, adjust=False).mean().iloc[-1])
+        ema50 = safe_float(close.ewm(span=50, adjust=False).mean().iloc[-1])
+        ema200 = safe_float(close.ewm(span=200, adjust=False).mean().iloc[-1]) if len(close) >= 200 else None
 
         ema_trend = "Bullish" if (latest_price > ema20 and (not ema50 or ema20 > ema50)) else "Bearish"
         golden_cross = bool(ema50 > ema200) if (ema50 and ema200) else False
@@ -258,10 +298,10 @@ def run_technical_analysis(symbol: str, period: str = "1y") -> str:
         signal_series = macd_series.ewm(span=9, adjust=False).mean()
         hist_series = macd_series - signal_series
 
-        macd_val = float(macd_series.iloc[-1])
-        signal_val = float(signal_series.iloc[-1])
-        hist_val = float(hist_series.iloc[-1])
-        prev_hist = float(hist_series.iloc[-2]) if len(hist_series) >= 2 else 0.0
+        macd_val = safe_float(macd_series.iloc[-1])
+        signal_val = safe_float(signal_series.iloc[-1])
+        hist_val = safe_float(hist_series.iloc[-1])
+        prev_hist = safe_float(hist_series.iloc[-2]) if len(hist_series) >= 2 else 0.0
 
         macd_signal = (
             "Bullish Crossover" if (hist_val > 0 and prev_hist <= 0)
@@ -275,8 +315,8 @@ def run_technical_analysis(symbol: str, period: str = "1y") -> str:
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / loss
         rsi_series = 100 - (100 / (1 + rs))
-        rsi_val = float(rsi_series.iloc[-1]) if not rsi_series.empty else None
-        prev_rsi = float(rsi_series.iloc[-6]) if len(rsi_series) >= 6 else rsi_val
+        rsi_val = safe_float(rsi_series.iloc[-1]) if not rsi_series.empty else None
+        prev_rsi = safe_float(rsi_series.iloc[-6]) if len(rsi_series) >= 6 else rsi_val
         rsi_trend = "Rising" if (rsi_val and prev_rsi and rsi_val > prev_rsi) else "Falling"
 
         rsi_status = "Neutral"
@@ -287,8 +327,8 @@ def run_technical_analysis(symbol: str, period: str = "1y") -> str:
                 rsi_status = "Oversold"
 
         # 4. Volume Analysis
-        latest_vol = float(volume.iloc[-1])
-        avg_vol_20 = float(volume.tail(20).mean())
+        latest_vol = safe_float(volume.iloc[-1])
+        avg_vol_20 = safe_float(volume.tail(20).mean())
         vol_ratio = round((latest_vol / avg_vol_20), 2) if avg_vol_20 > 0 else 1.0
         vol_status = (
             "High Volume Surge (>1.5x Avg)" if vol_ratio >= 1.5
@@ -296,8 +336,8 @@ def run_technical_analysis(symbol: str, period: str = "1y") -> str:
         )
 
         # 5. Bollinger Bands (20, 2)
-        sma20 = float(close.rolling(window=20).mean().iloc[-1])
-        std20 = float(close.rolling(window=20).std().iloc[-1])
+        sma20 = safe_float(close.rolling(window=20).mean().iloc[-1])
+        std20 = safe_float(close.rolling(window=20).std().iloc[-1])
         upper_bb = sma20 + (std20 * 2)
         lower_bb = sma20 - (std20 * 2)
         percent_b = round((latest_price - lower_bb) / (upper_bb - lower_bb), 2) if upper_bb > lower_bb else 0.5
@@ -336,9 +376,9 @@ def run_technical_analysis(symbol: str, period: str = "1y") -> str:
                 "percent_b": percent_b,
             },
         }
-        return json.dumps(ta_data, indent=2)
+        return safe_json_dumps(ta_data, indent=2)
     except Exception as e:
-        return json.dumps({"error": f"Technical analysis failed for {symbol}: {str(e)}"})
+        return safe_json_dumps({"error": f"Technical analysis failed for {symbol}: {str(e)}"})
 
 
 
@@ -373,7 +413,7 @@ def screen_stocks(sector_or_theme: str) -> str:
         except Exception:
             continue
 
-    return json.dumps({"theme": sector_or_theme, "stocks": screener_results}, indent=2)
+    return safe_json_dumps({"theme": sector_or_theme, "stocks": screener_results}, indent=2)
 
 
 @tool
@@ -390,7 +430,7 @@ def recommend_portfolio_optimization(symbols: list[str]) -> str:
         if returns.empty or returns.shape[1] < 2:
             equal_weight = round(1.0 / len(symbols), 4)
             res = {s: equal_weight for s in symbols}
-            return json.dumps({"symbols": symbols, "weights": [equal_weight]*len(symbols), "table": res, "notes": "Equal weight allocation fallback (insufficient data)"}, indent=2)
+            return safe_json_dumps({"symbols": symbols, "weights": [equal_weight]*len(symbols), "table": res, "notes": "Equal weight allocation fallback (insufficient data)"}, indent=2)
 
         cov = returns.cov()
         corr = returns.corr()
@@ -419,7 +459,7 @@ def recommend_portfolio_optimization(symbols: list[str]) -> str:
         weights = weights / weights.sum()
         result_dict = {sym: round(float(weights[sym]), 4) for sym in weights.index}
 
-        return json.dumps({
+        return safe_json_dumps({
             "symbols": list(result_dict.keys()),
             "weights": list(result_dict.values()),
             "table": result_dict,
@@ -427,7 +467,7 @@ def recommend_portfolio_optimization(symbols: list[str]) -> str:
         }, indent=2)
     except Exception as e:
         equal_weight = round(1.0 / len(symbols), 4)
-        return json.dumps({"symbols": symbols, "weights": [equal_weight]*len(symbols), "table": {s: equal_weight for s in symbols}, "notes": f"Fallback equal weighting due to error: {str(e)}"}, indent=2)
+        return safe_json_dumps({"symbols": symbols, "weights": [equal_weight]*len(symbols), "table": {s: equal_weight for s in symbols}, "notes": f"Fallback equal weighting due to error: {str(e)}"}, indent=2)
 
 
 @tool
@@ -445,9 +485,9 @@ def get_market_news() -> str:
                     "publisher": content.get("provider", {}).get("displayName") or item.get("publisher"),
                     "link": content.get("canonicalUrl", {}).get("url") or item.get("link"),
                 })
-        return json.dumps({"market": "Indian Market (NSE)", "news": articles}, indent=2)
+        return safe_json_dumps({"market": "Indian Market (NSE)", "news": articles}, indent=2)
     except Exception as e:
-        return json.dumps({"error": f"Failed to fetch market news: {str(e)}"})
+        return safe_json_dumps({"error": f"Failed to fetch market news: {str(e)}"})
 
 
 @tool
@@ -462,12 +502,12 @@ def get_user_portfolio(user_email_or_id: str = "main") -> str:
             stmt = select(Portfolio).order_by(Portfolio.created_at.desc())
             portfolio = session.exec(stmt).first()
             if not portfolio:
-                return json.dumps({"message": "No portfolio holdings found for user."})
+                return safe_json_dumps({"message": "No portfolio holdings found for user."})
 
             items_stmt = select(PortfolioItem).where(PortfolioItem.portfolio_id == portfolio.id)
             items = session.exec(items_stmt).all()
             if not items:
-                return json.dumps({
+                return safe_json_dumps({
                     "portfolio_name": portfolio.name,
                     "holdings": [],
                     "message": "Portfolio exists but contains 0 stock holdings."
@@ -512,7 +552,7 @@ def get_user_portfolio(user_email_or_id: str = "main") -> str:
             total_gain = total_current_val - total_invested
             total_ret_pct = ((total_current_val - total_invested) / total_invested * 100) if total_invested > 0 else 0.0
 
-            return json.dumps({
+            return safe_json_dumps({
                 "portfolio_name": portfolio.name,
                 "total_invested": round(total_invested, 2),
                 "total_current_value": round(total_current_val, 2),
@@ -521,7 +561,7 @@ def get_user_portfolio(user_email_or_id: str = "main") -> str:
                 "holdings": holdings_list,
             }, indent=2)
     except Exception as e:
-        return json.dumps({"error": f"Failed to fetch user portfolio holdings: {str(e)}"})
+        return safe_json_dumps({"error": f"Failed to fetch user portfolio holdings: {str(e)}"})
 
 
 @tool
@@ -536,7 +576,7 @@ def create_user_watchlist(watchlist_name: str, symbols: list[str]) -> str:
             user_stmt = select(User).order_by(User.id)
             user = session.exec(user_stmt).first()
             if not user:
-                return json.dumps({"error": "No active user found to create watchlist"})
+                return safe_json_dumps({"error": "No active user found to create watchlist"})
 
             wl = Watchlist(user_id=user.id, name=watchlist_name.strip())
             session.add(wl)
@@ -551,13 +591,13 @@ def create_user_watchlist(watchlist_name: str, symbols: list[str]) -> str:
                 added_symbols.append(norm_sym)
 
             session.commit()
-            return json.dumps({
+            return safe_json_dumps({
                 "message": f"Successfully created watchlist '{watchlist_name}'",
                 "watchlist_id": str(wl.id),
                 "symbols": added_symbols
             })
     except Exception as e:
-        return json.dumps({"error": f"Failed to create user watchlist: {str(e)}"})
+        return safe_json_dumps({"error": f"Failed to create user watchlist: {str(e)}"})
 
 
 @tool
@@ -568,20 +608,20 @@ def calculate_scientific_expression(expression: str) -> str:
     Example: "2**10" returns {"result": 1024.0, "latex": "2^{10} = 1024", "error": null}
     """
     if not sympy:
-        return json.dumps({"error": "SymPy not installed"})
+        return safe_json_dumps({"error": "SymPy not installed"})
 
     try:
         transformations = standard_transformations + (implicit_multiplication_application,)
         expr = parse_expr(expression, transformations=transformations)
         result = float(expr.evalf())
         latex_str = sympy_latex(expr)
-        return json.dumps({
+        return safe_json_dumps({
             "result": result,
             "latex": f"{latex_str} = {result}",
             "error": None
         })
     except Exception as e:
-        return json.dumps({"error": f"Failed to evaluate expression: {str(e)}"})
+        return safe_json_dumps({"error": f"Failed to evaluate expression: {str(e)}"})
 
 
 @tool
@@ -629,7 +669,7 @@ def search_web_for_stock_info(query: str, max_results: int = 5) -> str:
         except Exception as e_fallback:
             logger.warning(f"Web search fallback failed for '{query}': {e_fallback}")
 
-    return json.dumps({"results": results_list, "query": query, "error": None if results_list else "No results found"})
+    return safe_json_dumps({"results": results_list, "query": query, "error": None if results_list else "No results found"})
 
 
 @tool
@@ -640,18 +680,28 @@ def get_price_history_chart_data(symbol: str, period: str = "1mo") -> str:
         ticker = yf.Ticker(norm_sym)
         df = ticker.history(period=period)
         if df.empty:
-            return json.dumps({"error": f"No price history found for {norm_sym}"})
+            return safe_json_dumps({"error": f"No price history found for {norm_sym}"})
 
         points = []
         for idx, row in df.iterrows():
             date_str = idx.strftime("%Y-%m-%d") if hasattr(idx, "strftime") else str(idx)[:10]
+            o = row.get("Open")
+            h = row.get("High")
+            l = row.get("Low")
+            c = row.get("Close")
+            v = row.get("Volume")
+
+            # Skip rows where core price attributes are NaN or missing
+            if pd.isna(o) or pd.isna(h) or pd.isna(l) or pd.isna(c):
+                continue
+
             points.append({
                 "date": date_str,
-                "open": round(float(row.get("Open", 0.0)), 2),
-                "high": round(float(row.get("High", 0.0)), 2),
-                "low": round(float(row.get("Low", 0.0)), 2),
-                "close": round(float(row.get("Close", 0.0)), 2),
-                "volume": int(row.get("Volume", 0)),
+                "open": round(safe_float(o), 2),
+                "high": round(safe_float(h), 2),
+                "low": round(safe_float(l), 2),
+                "close": round(safe_float(c), 2),
+                "volume": int(safe_float(v, 0)),
             })
 
         payload = {
@@ -659,7 +709,7 @@ def get_price_history_chart_data(symbol: str, period: str = "1mo") -> str:
             "points": points,
             "period": period,
         }
-        return json.dumps({
+        return safe_json_dumps({
             "_chart_payload": payload,
             "_llm_message": f"Interactive price history chart for {norm_sym} ({period}) has been generated and displayed in the UI artifact.",
             "symbol": norm_sym,
@@ -667,7 +717,7 @@ def get_price_history_chart_data(symbol: str, period: str = "1mo") -> str:
             "period": period,
         })
     except Exception as e:
-        return json.dumps({"error": f"Failed to fetch price history chart data: {str(e)}"})
+        return safe_json_dumps({"error": f"Failed to fetch price history chart data: {str(e)}"})
 
 
 @tool
@@ -678,7 +728,7 @@ def get_quarterly_growth_chart_data(symbol: str) -> str:
         ticker = yf.Ticker(norm_sym)
         q_fin = ticker.quarterly_financials
         if q_fin is None or q_fin.empty:
-            return json.dumps({"error": f"No quarterly financials found for {norm_sym}"})
+            return safe_json_dumps({"error": f"No quarterly financials found for {norm_sym}"})
 
         cols = list(q_fin.columns)
         quarters = [c.strftime("%Y-%m-%d") if hasattr(c, "strftime") else str(c)[:10] for c in cols[::-1]]
@@ -695,20 +745,22 @@ def get_quarterly_growth_chart_data(symbol: str) -> str:
         revenue = []
         net_income = []
         for c in cols[::-1]:
-            revenue.append(round(float(rev_series[c]), 2) if rev_series is not None and pd.notna(rev_series[c]) else 0.0)
-            net_income.append(round(float(inc_series[c]), 2) if inc_series is not None and pd.notna(inc_series[c]) else 0.0)
+            rev_val = rev_series[c] if rev_series is not None else 0.0
+            inc_val = inc_series[c] if inc_series is not None else 0.0
+            revenue.append(round(safe_float(rev_val), 2))
+            net_income.append(round(safe_float(inc_val), 2))
 
         qoq_growth = [0.0]
         for i in range(1, len(revenue)):
             prev = revenue[i - 1]
             qoq = round(((revenue[i] - prev) / abs(prev) * 100), 2) if prev != 0 else 0.0
-            qoq_growth.append(qoq)
+            qoq_growth.append(safe_float(qoq))
 
         yoy_growth = [0.0] * len(revenue)
         for i in range(len(revenue)):
             if i >= 4 and revenue[i - 4] != 0:
                 yoy = round(((revenue[i] - revenue[i - 4]) / abs(revenue[i - 4]) * 100), 2)
-                yoy_growth[i] = yoy
+                yoy_growth[i] = safe_float(yoy)
 
         payload = {
             "symbol": norm_sym,
@@ -718,7 +770,7 @@ def get_quarterly_growth_chart_data(symbol: str) -> str:
             "yoy_growth_pct": yoy_growth,
             "qoq_growth_pct": qoq_growth,
         }
-        return json.dumps({
+        return safe_json_dumps({
             "_chart_payload": payload,
             "_llm_message": f"Interactive quarterly financial growth chart for {norm_sym} has been generated and displayed in the UI artifact.",
             "symbol": norm_sym,
@@ -729,7 +781,7 @@ def get_quarterly_growth_chart_data(symbol: str) -> str:
             "qoq_growth_pct": qoq_growth,
         })
     except Exception as e:
-        return json.dumps({"error": f"Failed to fetch quarterly growth chart data: {str(e)}"})
+        return safe_json_dumps({"error": f"Failed to fetch quarterly growth chart data: {str(e)}"})
 
 
 @tool
@@ -739,7 +791,8 @@ def get_analyst_target_chart_data(symbol: str) -> str:
     try:
         ticker = yf.Ticker(norm_sym)
         info = ticker.info or {}
-        current_price = float(info.get("currentPrice") or info.get("regularMarketPrice") or 0.0)
+        raw_price = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
+        current_price = safe_float(raw_price)
 
         targets_df = getattr(ticker, "analyst_price_targets", None)
         dates = []
@@ -749,19 +802,22 @@ def get_analyst_target_chart_data(symbol: str) -> str:
         if isinstance(targets_df, pd.DataFrame) and not targets_df.empty:
             for idx, row in targets_df.iterrows():
                 d_str = idx.strftime("%Y-%m-%d") if hasattr(idx, "strftime") else str(idx)[:10]
-                dates.append(d_str)
-                target_prices.append(round(float(row.get("target", row.get("mean", current_price))), 2))
-                firms.append(str(row.get("firm", "Analyst Consensus")))
+                t_val = row.get("target", row.get("mean", current_price))
+                if pd.notna(t_val):
+                    dates.append(d_str)
+                    target_prices.append(round(safe_float(t_val, current_price), 2))
+                    firms.append(str(row.get("firm", "Analyst Consensus")))
         elif isinstance(targets_df, dict) and targets_df:
             current_target = targets_df.get("current") or targets_df.get("mean") or info.get("targetMeanPrice")
-            if current_target:
+            if current_target and pd.notna(current_target):
                 dates.append(datetime.now(UTC).strftime("%Y-%m-%d"))
-                target_prices.append(round(float(current_target), 2))
+                target_prices.append(round(safe_float(current_target, current_price), 2))
                 firms.append("Consensus Target")
 
         if not dates:
             dates = [datetime.now(UTC).strftime("%Y-%m-%d")]
-            target_prices = [round(float(info.get("targetMeanPrice") or current_price * 1.1), 2)]
+            raw_target = info.get("targetMeanPrice") or (current_price * 1.1)
+            target_prices = [round(safe_float(raw_target, current_price * 1.1), 2)]
             firms = ["Consensus Target"]
 
         payload = {
@@ -771,7 +827,7 @@ def get_analyst_target_chart_data(symbol: str) -> str:
             "firms": firms,
             "current_price": round(current_price, 2),
         }
-        return json.dumps({
+        return safe_json_dumps({
             "_chart_payload": payload,
             "_llm_message": f"Interactive analyst price target chart for {norm_sym} has been generated and displayed in the UI artifact.",
             "symbol": norm_sym,
@@ -781,7 +837,7 @@ def get_analyst_target_chart_data(symbol: str) -> str:
             "current_price": round(current_price, 2),
         })
     except Exception as e:
-        return json.dumps({"error": f"Failed to fetch analyst target chart data: {str(e)}"})
+        return safe_json_dumps({"error": f"Failed to fetch analyst target chart data: {str(e)}"})
 
 
 @tool

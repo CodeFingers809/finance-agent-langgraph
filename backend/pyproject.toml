@@ -33,7 +33,6 @@ dependencies = [
     "scipy>=1.11.0",
     "numpy>=1.26.0",
     "pandas>=2.1.0",
-    "langchain-anthropic>=1.5.4",
     "redis>=5.0.0,<6.0.0",
     "clerk-backend-api>=7.0.0",
     "svix>=1.99.1",
