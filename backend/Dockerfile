@@ -11,12 +11,9 @@ RUN bun install
 
 COPY ./frontend /app/frontend
 
-ARG VITE_API_URL=
-ARG VITE_CLERK_PUBLISHABLE_KEY=
-ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
-
-
-RUN bun run build
+# Load env file for build-time variables (Clerk key, API URL, etc.)
+COPY .env /app/.env
+RUN set -a && . /app/.env && set +a && bun run build
 
 
 
