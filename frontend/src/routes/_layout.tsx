@@ -1,18 +1,12 @@
 import { useOrganization, useOrganizationList } from "@clerk/react"
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router"
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 
 import { HeaderControls } from "@/components/Common/HeaderControls"
 import AppSidebar from "@/components/Sidebar/AppSidebar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import useAuth from "@/hooks/useAuth"
 import { useCheckPendingTasks } from "@/hooks/useCheckPendingTasks"
-
-// No beforeLoad auth check: it runs before React mounts, so the Clerk token
-// bridge isn't installed yet and any API call from here 401s -- which used to
-// bounce to /login, whose own guard bounced back, looping forever. Auth is
-// gated in the component below, where Clerk's hooks are available.
-
 
 export const Route = createFileRoute("/_layout")({
   component: Layout,
@@ -25,6 +19,7 @@ function Layout() {
   const { userMemberships, setActive } = useOrganizationList({
     userMemberships: { infinite: true },
   })
+  const activatingRef = useRef(false)
 
   // Check for pending tasks and redirect if needed
   useCheckPendingTasks()
@@ -40,13 +35,13 @@ function Layout() {
     if (
       isLoaded &&
       isSignedIn &&
+      !userMemberships.isLoading &&
       userMemberships?.data &&
       userMemberships.data.length === 0
     ) {
       navigate({ to: "/setup-organization", replace: true })
-      return
     }
-  }, [isLoaded, isSignedIn, userMemberships?.data, navigate])
+  }, [isLoaded, isSignedIn, userMemberships.isLoading, userMemberships?.data, navigate])
 
   // Activate the user's first org so org-scoped requests carry an org_id.
   useEffect(() => {
@@ -54,14 +49,19 @@ function Layout() {
       !organization &&
       userMemberships?.data &&
       userMemberships.data.length > 0 &&
-      setActive
+      setActive &&
+      !activatingRef.current
     ) {
-      setActive({ organization: userMemberships.data[0].organization.id })
+      activatingRef.current = true
+      setActive({ organization: userMemberships.data[0].organization.id }).finally(() => {
+        activatingRef.current = false
+      })
     }
   }, [organization, userMemberships?.data, setActive])
 
   // Render nothing until Clerk resolves and confirms user is signed in
   if (!isLoaded || !isSignedIn) return null
+
 
 
 

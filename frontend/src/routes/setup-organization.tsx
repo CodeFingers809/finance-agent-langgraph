@@ -74,11 +74,14 @@ function SetupOrganization() {
 
       const org = await response.json()
 
-      if (org.id && setActive) {
-        await setActive({ organization: org.id })
+      if (org.id) {
+        if (setActive) {
+          await setActive({ organization: org.id })
+        }
         toast.success("Organization created successfully!")
-        navigate({ to: "/chat", replace: true })
+        window.location.href = "/chat"
       }
+
     } catch (err: any) {
 
 
