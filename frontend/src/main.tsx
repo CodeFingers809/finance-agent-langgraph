@@ -97,10 +97,13 @@ declare module "@tanstack/react-router" {
     }
 }
 
+const CLERK_DOMAIN = import.meta.env.VITE_CLERK_DOMAIN || (typeof window !== "undefined" && window.location.hostname.includes("brnch.in") ? "finance-agent.brnch.in" : undefined);
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
     <StrictMode>
         <ClerkProvider
             publishableKey={PUBLISHABLE_KEY}
+            domain={CLERK_DOMAIN}
             routerPush={(to: string) => router.navigate({ to })}
             routerReplace={(to: string) =>
                 router.navigate({ to, replace: true })
