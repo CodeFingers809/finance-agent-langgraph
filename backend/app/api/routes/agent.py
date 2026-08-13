@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.agent.graph import stream_agent_events
-from app.agent.rag.retrieve import current_org_id
+from app.agent.rag.retrieve import current_org_id, current_user_id
 from app.agent.research_graph import stream_agent_events_research
 from app.api.deps import CurrentAuth, CurrentUser, SessionDep
 from app.core.db import engine
@@ -209,8 +209,9 @@ async def chat_stream(
     # 1. Enforce Quota & Rate Limit
     check_and_update_quota(session, current_user.id, payload.model_name)
 
-    # Scope the RAG tool to the caller's org for this request.
+    # Scope the RAG tool and agent tools to the caller's org and user for this request.
     current_org_id.set(auth.org_id)
+    current_user_id.set(current_user.id)
 
     # 2. Retrieve or create conversation
     conv = None
@@ -456,8 +457,9 @@ async def research_stream(
     # Enforce quota
     check_and_update_quota(session, current_user.id, payload.model_name)
 
-    # Scope the RAG tool to the caller's org for this request.
+    # Scope the RAG tool and agent tools to the caller's org and user for this request.
     current_org_id.set(auth.org_id)
+    current_user_id.set(current_user.id)
 
     # Retrieve existing or create new research conversation
     conv = None

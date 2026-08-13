@@ -568,17 +568,23 @@ def get_user_portfolio(user_email_or_id: str = "main") -> str:
 def create_user_watchlist(watchlist_name: str, symbols: list[str]) -> str:
     """Create a new custom watchlist with given stock symbols (e.g. ['MAZDOCK.NS', 'COCHINSHIP.NS']) in the user's account."""
     from sqlmodel import Session, select
+    from app.agent.rag.retrieve import current_org_id, current_user_id
     from app.core.db import engine
     from app.models import User, Watchlist, WatchlistItem
 
     try:
         with Session(engine) as session:
-            user_stmt = select(User).order_by(User.id)
-            user = session.exec(user_stmt).first()
+            active_user_id = current_user_id.get()
+            active_org_id = current_org_id.get()
+            if active_user_id:
+                user = session.get(User, active_user_id)
+            else:
+                user = session.exec(select(User).order_by(User.id)).first()
+
             if not user:
                 return safe_json_dumps({"error": "No active user found to create watchlist"})
 
-            wl = Watchlist(user_id=user.id, name=watchlist_name.strip())
+            wl = Watchlist(user_id=user.id, org_id=active_org_id, name=watchlist_name.strip())
             session.add(wl)
             session.commit()
             session.refresh(wl)

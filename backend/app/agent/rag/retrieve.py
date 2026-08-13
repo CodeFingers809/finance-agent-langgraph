@@ -17,7 +17,10 @@ logger = logging.getLogger(__name__)
 
 # The agent invokes tools without arguments beyond the query string, so the
 # active org travels out-of-band. Set per request in the agent route.
+import uuid
+
 current_org_id: ContextVar[str | None] = ContextVar("current_org_id", default=None)
+current_user_id: ContextVar[uuid.UUID | None] = ContextVar("current_user_id", default=None)
 
 TOP_K = 5
 
