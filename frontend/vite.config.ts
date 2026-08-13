@@ -58,7 +58,7 @@ export default defineConfig({
     },
   },
   define: {
-    "process.env": {},
+    __BUNDLED_DEV__: "true",
   },
   plugins: [
     tanstackRouter({
